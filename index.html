@@ -207,10 +207,10 @@ tbody tr:hover .tact{opacity:1}
 
 /* MODAL */
 .mbk{position:fixed;inset:0;background:rgba(18,19,42,.4);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
-.modal{background:var(--surface);border-radius:var(--rxl);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);border:1px solid var(--border)}
+.modal{background:var(--surface);border-radius:var(--rxl);width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2);border:1px solid var(--border)}
 .mh{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .mh h3{font-size:15px;font-weight:700;color:var(--blue)}
-.mb{padding:20px 22px}
+.mb,.modal-body{padding:20px 22px;overflow-y:auto;flex:1;min-height:0}
 .mf{padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:7px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 var(--rxl) var(--rxl)}
 .fg{display:grid;gap:12px}
 .fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -309,7 +309,7 @@ tbody tr:hover .td-actions{opacity:1}
 .form-section{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;padding-bottom:8px;border-bottom:1px solid var(--border);margin-top:2px}
 .modal-header{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .modal-header h3{font-size:15px;font-weight:700;color:var(--blue)}
-.modal-body{padding:20px 22px}
+.modal-body{padding:20px 22px;overflow-y:auto;flex:1;min-height:0}
 .modal-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;gap:7px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 var(--rxl) var(--rxl)}
 .modal-backdrop{position:fixed;inset:0;background:rgba(18,19,42,.4);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
 .btn-close{background:none;color:var(--text-3);font-size:18px;line-height:1;padding:4px 6px;border-radius:var(--r);display:flex;align-items:center;cursor:pointer;border:none}
@@ -448,6 +448,7 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="sb-item" id="nav-funil" onclick="navigate('funil')"><i class="ti ti-filter"></i>Funil comercial</div>
       <div class="sb-sec">Análise</div>
       <div class="sb-item" id="nav-analise" onclick="navigate('analise')"><i class="ti ti-chart-pie"></i>Análise</div>
+      <div class="sb-item" id="nav-dre" onclick="navigate('dre')"><i class="ti ti-table"></i>DRE</div>
       <div class="sb-item" id="nav-relatorios" onclick="navigate('relatorios')"><i class="ti ti-chart-bar"></i>Relatórios</div>
     </nav>
     <div class="sb-foot">
@@ -519,6 +520,19 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="tb-div"></div>
       <div class="content" id="analise-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
     </div>
+    <div id="section-dre" class="section">
+      <div class="topbar">
+        <div><div class="pg-title">DRE</div><div class="pg-sub">Demonstrativo de resultado do exercício</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="dre-ano" onchange="loadDRE()" style="height:32px;font-size:12px;width:100px">
+            <option value="2026">2026</option><option value="2025">2025</option>
+          </select>
+          <button class="btn btn-out2" onclick="exportDRE()"><i class="ti ti-download"></i>Excel</button>
+        </div>
+      </div>
+      <div class="tb-div"></div>
+      <div class="content" id="dre-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
+    </div>
     <div id="section-relatorios" class="section">
       <div class="topbar"><div><div class="pg-title">Relatórios</div><div class="pg-sub">Exportação de dados</div></div></div>
       <div class="tb-div"></div>
@@ -583,7 +597,11 @@ async function initApp(){
   navigate('dashboard');
 }
 
-function onFrontChange(){FRONT=document.getElementById('front-filter').value;const a=document.querySelector('.sb-item.active');if(a)loadSection(a.id.replace('nav-',''));}
+function onFrontChange(){
+  FRONT=document.getElementById('front-filter').value;
+  const a=document.querySelector('.sb-item.on');
+  if(a) loadSection(a.id.replace('nav-',''));
+}
 
 function navigate(sec){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active-section'));
@@ -603,6 +621,7 @@ function loadSection(sec){
   else if(sec==='funil')loadFunil();
   else if(sec==='categorias')loadCategorias();
   else if(sec==='analise')loadAnalise();
+  else if(sec==='dre')loadDRE();
   else if(sec==='relatorios')loadRelatorios();
 }
 
@@ -1325,7 +1344,7 @@ async function openLancamentoModal(l){
     <div class="modal-body"><div class="form-grid">
       <div class="form-section">Classificação</div>
       <div class="form-row">
-        <div><label>Tipo *</label><select id="lc-tipo"><option value="entrada" ${!l||l.tipo==='entrada'?'selected':''}>Entrada</option><option value="saida" ${l&&l.tipo==='saida'?'selected':''}>Saída</option></select></div>
+        <div><label>Tipo *</label><select id="lc-tipo" onchange="filtrarCategoriasPorTipo()"><option value="entrada" ${!l||l.tipo==='entrada'?'selected':''}>Entrada</option><option value="saida" ${l&&l.tipo==='saida'?'selected':''}>Saída</option></select></div>
         <div><label>Front *</label><select id="lc-front"><option value="Nacasa Comunicação" ${!l||l.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${l&&l.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
       </div>
       <div class="form-row">
@@ -1336,7 +1355,48 @@ async function openLancamentoModal(l){
       <div><label>Descrição *</label><input id="lc-desc" value="${l?l.descricao:''}" placeholder="Descreva este lançamento"></div>
       <div class="form-row">
         <div><label>Valor (R$) *</label><input id="lc-val" type="number" step="0.01" value="${l?l.valor:''}" placeholder="0,00"></div>
-        <div><label>Forma de pagamento</label><input id="lc-forma" value="${l?l.forma_pagamento||'':''}" placeholder="PIX, boleto, transferência..."></div>
+        <div><label>Forma de pagamento</label>
+          <select id="lc-forma" onchange="onFormaChange()">
+            <option value="">Selecionar...</option>
+            <option value="PIX" ${l&&l.forma_pagamento==='PIX'?'selected':''}>PIX</option>
+            <option value="Boleto" ${l&&l.forma_pagamento==='Boleto'?'selected':''}>Boleto</option>
+            <option value="Transferência" ${l&&l.forma_pagamento==='Transferência'?'selected':''}>Transferência</option>
+            <option value="Cartão de crédito" ${l&&l.forma_pagamento==='Cartão de crédito'?'selected':''}>Cartão de crédito</option>
+            <option value="Cartão de débito" ${l&&l.forma_pagamento==='Cartão de débito'?'selected':''}>Cartão de débito</option>
+            <option value="Dinheiro" ${l&&l.forma_pagamento==='Dinheiro'?'selected':''}>Dinheiro</option>
+          </select>
+        </div>
+      </div>
+      <div id="lc-cartao-wrap" style="display:none">
+        <div class="form-row">
+          <div><label>Cartão</label>
+            <select id="lc-cartao">
+              <option value="">Selecionar banco...</option>
+              <option value="Itaú">Itaú</option>
+              <option value="Bradesco">Bradesco</option>
+              <option value="Nubank">Nubank</option>
+              <option value="Banco do Brasil">Banco do Brasil</option>
+              <option value="Caixa">Caixa</option>
+              <option value="Santander">Santander</option>
+              <option value="Inter">Inter</option>
+              <option value="C6">C6</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+          <div id="lc-parcelas-wrap" style="display:none">
+            <label>Parcelas</label>
+            <select id="lc-parcelas">
+              <option value="1">1x (à vista)</option>
+              <option value="2">2x</option><option value="3">3x</option>
+              <option value="4">4x</option><option value="5">5x</option>
+              <option value="6">6x</option><option value="7">7x</option>
+              <option value="8">8x</option><option value="9">9x</option>
+              <option value="10">10x</option><option value="11">11x</option>
+              <option value="12">12x</option><option value="18">18x</option>
+              <option value="24">24x</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="form-row">
         <div><label>Data de vencimento *</label><input id="lc-venc" type="date" value="${l?l.data_vencimento||'':''}"></div>
@@ -1355,11 +1415,66 @@ async function openLancamentoModal(l){
     </div>
   </div>`);
 }
+function onFormaChange(){
+  const forma = document.getElementById('lc-forma')?.value;
+  const cartaoWrap = document.getElementById('lc-cartao-wrap');
+  const parcelasWrap = document.getElementById('lc-parcelas-wrap');
+  if(!cartaoWrap) return;
+  const isCartao = forma === 'Cartão de crédito' || forma === 'Cartão de débito';
+  cartaoWrap.style.display = isCartao ? '' : 'none';
+  if(parcelasWrap){
+    parcelasWrap.style.display = forma === 'Cartão de crédito' ? '' : 'none';
+  }
+}
+
+// Chamar após modal abrir para refletir valor existente
+function initFormaModal(){
+  setTimeout(onFormaChange, 50);
+}
+
 async function saveLancamento(id){
-  const data={tipo:document.getElementById('lc-tipo').value,front:document.getElementById('lc-front').value,descricao:document.getElementById('lc-desc').value.trim(),categoria_id:document.getElementById('lc-cat').value||null,status:document.getElementById('lc-status').value,valor:parseFloat(document.getElementById('lc-val').value)||0,forma_pagamento:document.getElementById('lc-forma').value.trim(),data_vencimento:document.getElementById('lc-venc').value||null,data_pagamento:document.getElementById('lc-pgto').value||null,cliente_id:document.getElementById('lc-cli').value||null,contrato_id:document.getElementById('lc-ct').value||null,observacao:document.getElementById('lc-obs').value.trim(),lancado_por:SESSION.user.id};
-  if(!data.descricao||!data.valor||!data.data_vencimento){notify('Descrição, valor e vencimento são obrigatórios','error');return;}
-  try{id?await dbUpdate('lancamentos',id,data):await dbInsert('lancamentos',data);closeModalForce();notify(id?'Lançamento atualizado':'Lançamento registrado','success');loadLancamentos();}
-  catch(e){notify('Erro: '+e.message,'error');}
+  const forma=document.getElementById('lc-forma').value;
+  const cartao=document.getElementById('lc-cartao')?.value||'';
+  const parcelas=parseInt(document.getElementById('lc-parcelas')?.value||'1');
+  const isCredito=forma==='Cartão de crédito';
+  const valorTotal=parseFloat(document.getElementById('lc-val').value)||0;
+  const valorParcela=isCredito&&parcelas>1?Math.round((valorTotal/parcelas)*100)/100:valorTotal;
+  const obsBase=document.getElementById('lc-obs').value.trim();
+  const obsCartao=cartao?`Cartão: ${cartao}${isCredito&&parcelas>1?' · '+parcelas+'x de '+fmt(valorParcela):''}${obsBase?' · '+obsBase:''}`:obsBase;
+  const base={
+    tipo:document.getElementById('lc-tipo').value,
+    front:document.getElementById('lc-front').value,
+    descricao:document.getElementById('lc-desc').value.trim(),
+    categoria_id:document.getElementById('lc-cat').value||null,
+    status:document.getElementById('lc-status').value,
+    forma_pagamento:forma||null,
+    data_vencimento:document.getElementById('lc-venc').value||null,
+    data_pagamento:document.getElementById('lc-pgto').value||null,
+    cliente_id:document.getElementById('lc-cli').value||null,
+    contrato_id:document.getElementById('lc-ct').value||null,
+    lancado_por:SESSION.user.id,
+  };
+  if(!base.descricao||!valorTotal||!base.data_vencimento){notify('Descrição, valor e vencimento são obrigatórios','error');return;}
+  try{
+    if(id){
+      await dbUpdate('lancamentos',id,{...base,valor:valorTotal,observacao:obsCartao});
+      closeModalForce();notify('Lançamento atualizado','success');
+    } else if(isCredito&&parcelas>1){
+      const baseDate=new Date(base.data_vencimento+'T12:00:00');
+      const promises=Array.from({length:parcelas},(_,i)=>{
+        const d=new Date(baseDate);
+        d.setMonth(d.getMonth()+i);
+        const obs=`Cartão: ${cartao} · Parcela ${i+1}/${parcelas}${obsBase?' · '+obsBase:''}`;
+        return dbInsert('lancamentos',{...base,valor:valorParcela,data_vencimento:d.toISOString().slice(0,10),observacao:obs});
+      });
+      await Promise.all(promises);
+      closeModalForce();notify(`${parcelas} parcelas criadas com sucesso!`,'success');
+    } else {
+      await dbInsert('lancamentos',{...base,valor:valorTotal,observacao:obsCartao});
+      closeModalForce();notify('Lançamento registrado','success');
+    }
+    loadLancamentos();
+  }catch(e){notify('Erro: '+e.message,'error');}
 }
 async function deleteLancamento(id){
   if(!confirm('Excluir este lançamento?'))return;
@@ -1454,6 +1569,17 @@ async function loadFunil(){
     ETAPAS.forEach(e=>porEtapa[e]=leads.filter(l=>l.etapa===e));
 
     // Kanban resumo
+    // ── DADOS PARA GRÁFICO DE FUNIL ──
+    const etapasGraf = ETAPAS.filter(e=>e!=='Perdido');
+    const valoresPorEtapa = etapasGraf.map(e=>porEtapa[e]||[]);
+    const countPorEtapa = etapasGraf.map(e=>(porEtapa[e]||[]).length);
+    const valorPorEtapa = etapasGraf.map(e=>(porEtapa[e]||[]).reduce((s,l)=>s+Number(l.valor_potencial||0),0));
+    const qtdPorTemp = {
+      Quente: leads.filter(l=>l.temperatura==='Quente'&&l.etapa!=='Perdido').length,
+      Morno:  leads.filter(l=>l.temperatura==='Morno' &&l.etapa!=='Perdido').length,
+      Frio:   leads.filter(l=>l.temperatura==='Frio'  &&l.etapa!=='Perdido').length,
+    };
+
     const kanbanHtml = ETAPAS.filter(e=>e!=='Fechado'&&e!=='Perdido').map(e=>{
       const its=porEtapa[e]||[];
       const total=its.reduce((s,l)=>s+Number(l.valor_potencial||0),0);
@@ -1464,6 +1590,26 @@ async function loadFunil(){
         ${its.filter(l=>l.temperatura==='Quente').length>0?`<div style="margin-top:6px;font-size:11px;color:var(--red);font-weight:600"><i class="ti ti-flame"></i> ${its.filter(l=>l.temperatura==='Quente').length} quente${its.filter(l=>l.temperatura==='Quente').length>1?'s':''}</div>`:''}
       </div>`;
     }).join('');
+
+    // ── GRÁFICOS DO FUNIL ──
+    const grafHtml=`
+    <div class="cgrid" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><h3>Leads por etapa</h3></div>
+        <div class="card-body"><div style="position:relative;height:200px"><canvas id="funil-etapa-chart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Por temperatura</h3></div>
+        <div class="card-body" style="display:flex;align-items:center;justify-content:center">
+          <div style="position:relative;height:180px;width:180px"><canvas id="funil-temp-chart"></canvas></div>
+          <div style="margin-left:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:12px;height:12px;border-radius:50%;background:var(--red)"></div><span style="font-size:12px">Quente: <strong>${qtdPorTemp.Quente}</strong></span></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:12px;height:12px;border-radius:50%;background:var(--gold)"></div><span style="font-size:12px">Morno: <strong>${qtdPorTemp.Morno}</strong></span></div>
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:var(--text-3)"></div><span style="font-size:12px">Frio: <strong>${qtdPorTemp.Frio}</strong></span></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
 
     const rows=leads.map(l=>{
       const tc=TEMP_CONFIG[l.temperatura]||TEMP_CONFIG['Morno'];
@@ -1514,6 +1660,42 @@ async function loadFunil(){
       <thead><tr><th>Lead</th><th>Front</th><th>Produto</th><th>Etapa</th><th>Temperatura</th><th>Valor potencial</th><th>Origem</th><th>Entrada</th><th style="width:80px"></th></tr></thead>
       <tbody>${rows||`<tr><td colspan="9"><div class="empty"><i class="ti ti-filter"></i><div class="et">Nenhum lead cadastrado</div></div></td></tr>`}</tbody>
     </table></div></div>`;
+  // Injetar gráficos antes da tabela
+  const tableEl = el.querySelector('.card');
+  if(tableEl) tableEl.insertAdjacentHTML('beforebegin', grafHtml);
+
+  // Inicializar charts
+  if(window._funilEtapaChart){window._funilEtapaChart.destroy();}
+  if(window._funilTempChart){window._funilTempChart.destroy();}
+  const etapaCanvas=document.getElementById('funil-etapa-chart');
+  if(etapaCanvas){
+    window._funilEtapaChart=new Chart(etapaCanvas,{
+      type:'bar',
+      data:{
+        labels:etapasGraf,
+        datasets:[
+          {label:'Qtd leads',data:countPorEtapa,backgroundColor:'rgba(43,63,212,.7)',borderRadius:4,yAxisID:'y'},
+          {label:'Valor (R$k)',data:valorPorEtapa.map(v=>Math.round(v/1000)),backgroundColor:'rgba(212,150,10,.5)',borderRadius:4,yAxisID:'y1'}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:{size:11}}}},scales:{
+        y:{position:'left',ticks:{stepSize:1,font:{size:10}},grid:{color:'#f0f0f0'},border:{display:false}},
+        y1:{position:'right',ticks:{callback:v=>v+'k',font:{size:10}},grid:{display:false},border:{display:false}},
+        x:{ticks:{font:{size:10}},grid:{display:false},border:{display:false}}
+      }}
+    });
+  }
+  const tempCanvas=document.getElementById('funil-temp-chart');
+  if(tempCanvas){
+    window._funilTempChart=new Chart(tempCanvas,{
+      type:'doughnut',
+      data:{
+        labels:['Quente','Morno','Frio'],
+        datasets:[{data:[qtdPorTemp.Quente,qtdPorTemp.Morno,qtdPorTemp.Frio],backgroundColor:['var(--red)','var(--gold)','#d1d5db'],borderWidth:2}]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}
+    });
+  }
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 
@@ -1854,6 +2036,104 @@ async function verHistoricoLead(leadId, nomeStr){
 }
 
 // ── RELATÓRIOS ──
+// ── DRE ──
+async function loadDRE(){
+  const el=document.getElementById('dre-content');
+  if(!el) return;
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
+  try{
+    const ano=document.getElementById('dre-ano')?.value||new Date().getFullYear();
+    let qe=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
+    let qs=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
+    if(FRONT){qe+=`&front=eq.${encodeURIComponent(FRONT)}`;qs+=`&front=eq.${encodeURIComponent(FRONT)}`;}
+    const [entradas,saidas]=await Promise.all([dbGet('lancamentos',qe),dbGet('lancamentos',qs)]);
+
+    const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    // Agrupar por categoria e mês
+    const catEntrada={}, catSaida={};
+    entradas.forEach(l=>{
+      const cat=l.categorias?.nome||'Sem categoria';
+      const mes=new Date(l.data_vencimento+'T12:00:00').getMonth();
+      if(!catEntrada[cat])catEntrada[cat]=Array(12).fill(0);
+      catEntrada[cat][mes]+=Number(l.valor);
+    });
+    saidas.forEach(l=>{
+      const cat=l.categorias?.nome||'Sem categoria';
+      const mes=new Date(l.data_vencimento+'T12:00:00').getMonth();
+      if(!catSaida[cat])catSaida[cat]=Array(12).fill(0);
+      catSaida[cat][mes]+=Number(l.valor);
+    });
+
+    const totEntMes=Array(12).fill(0), totSaiMes=Array(12).fill(0);
+    Object.values(catEntrada).forEach(arr=>arr.forEach((v,i)=>totEntMes[i]+=v));
+    Object.values(catSaida).forEach(arr=>arr.forEach((v,i)=>totSaiMes[i]+=v));
+    const resultMes=totEntMes.map((v,i)=>v-totSaiMes[i]);
+
+    const renderLinhas=(obj,cor)=>Object.entries(obj).map(([cat,vals])=>`
+      <tr style="font-size:12px">
+        <td style="padding-left:24px;color:var(--text-2)">${cat}</td>
+        ${vals.map(v=>`<td class="td-mono" style="color:${cor};text-align:right">${v>0?fmt(v):'—'}</td>`).join('')}
+        <td class="td-mono" style="color:${cor};text-align:right;font-weight:700">${fmt(vals.reduce((a,b)=>a+b,0))}</td>
+      </tr>`).join('');
+
+    el.innerHTML=`
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
+      <thead>
+        <tr style="background:var(--blue);color:#fff">
+          <th style="padding:10px 14px;text-align:left;white-space:nowrap">Descrição</th>
+          ${meses.map(m=>`<th style="padding:10px 8px;text-align:right;white-space:nowrap">${m}</th>`).join('')}
+          <th style="padding:10px 14px;text-align:right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--green-bg)">
+          <td style="padding:8px 14px;font-weight:700;color:var(--green)">RECEITAS</td>
+          ${totEntMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(v)}</td>`).join('')}
+          <td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(totEntMes.reduce((a,b)=>a+b,0))}</td>
+        </tr>
+        ${renderLinhas(catEntrada,'var(--green)')}
+        <tr style="background:var(--red-bg)">
+          <td style="padding:8px 14px;font-weight:700;color:var(--red)">DESPESAS</td>
+          ${totSaiMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(v)}</td>`).join('')}
+          <td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(totSaiMes.reduce((a,b)=>a+b,0))}</td>
+        </tr>
+        ${renderLinhas(catSaida,'var(--red)')}
+        <tr style="background:var(--blue-light);border-top:2px solid var(--blue)">
+          <td style="padding:10px 14px;font-weight:700;color:var(--blue)">RESULTADO</td>
+          ${resultMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'}">${fmt(v)}</td>`).join('')}
+          <td class="td-mono" style="text-align:right;font-weight:700;color:${resultMes.reduce((a,b)=>a+b,0)>=0?'var(--green)':'var(--red)'}">${fmt(resultMes.reduce((a,b)=>a+b,0))}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 14px;color:var(--text-2)">Margem %</td>
+          ${totEntMes.map((v,i)=>`<td class="td-mono" style="text-align:right;color:${resultMes[i]>=0?'var(--green)':'var(--red)'}">${v>0?Math.round((resultMes[i]/v)*100)+'%':'—'}</td>`).join('')}
+          <td class="td-mono" style="text-align:right">${totEntMes.reduce((a,b)=>a+b,0)>0?Math.round((resultMes.reduce((a,b)=>a+b,0)/totEntMes.reduce((a,b)=>a+b,0))*100)+'%':'—'}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>`;
+  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
+}
+
+// ── FILTRAR CATEGORIAS POR TIPO no modal de lançamentos ──
+function filtrarCategoriasPorTipo(){
+  const tipo=document.getElementById('lc-tipo')?.value;
+  const sel=document.getElementById('lc-cat');
+  if(!sel||!tipo)return;
+  Array.from(sel.options).forEach(opt=>{
+    if(!opt.value){opt.style.display='';return;}
+    const optTipo=opt.text.startsWith('[entrada]')?'entrada':'saida';
+    opt.style.display=optTipo===tipo?'':'none';
+  });
+  // Limpar seleção se tipo incompatível
+  const cur=sel.options[sel.selectedIndex];
+  if(cur&&cur.value){
+    const curTipo=cur.text.startsWith('[entrada]')?'entrada':'saida';
+    if(curTipo!==tipo)sel.value='';
+  }
+}
+
 // ── ANÁLISE ──
 async function loadAnalise(){
   const el=document.getElementById('analise-content');
@@ -1941,6 +2221,64 @@ async function loadAnalise(){
         </table></div>
       </div>
     </div>`;
+  
+    // ── CURVA ABC ──
+    const ctsFull=await dbGet('contratos',`select=id,descricao,valor_total,front,clientes(nome)&status=in.(ativo,encerrado)&order=valor_total.desc${FRONT?'&front=eq.'+encodeURIComponent(FRONT):''}`);
+    const totalCts=ctsFull.reduce((s,ct)=>s+Number(ct.valor_total),0);
+    let acumCts=0;
+    const abcCts=ctsFull.map(ct=>{
+      acumCts+=Number(ct.valor_total);
+      const pct=totalCts>0?Math.round((Number(ct.valor_total)/totalCts)*100):0;
+      const acumPct=totalCts>0?Math.round((acumCts/totalCts)*100):0;
+      return {...ct,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
+    });
+    const prodMap={};
+    entradas.filter(l=>l.status==='pago').forEach(l=>{
+      const p=l.categorias?.nome||'Sem categoria';
+      prodMap[p]=(prodMap[p]||0)+Number(l.valor);
+    });
+    const totalProd=Object.values(prodMap).reduce((a,b)=>a+b,0);
+    let acumProd=0;
+    const abcProd=Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>{
+      acumProd+=val;
+      const pct=totalProd>0?Math.round((val/totalProd)*100):0;
+      const acumPct=totalProd>0?Math.round((acumProd/totalProd)*100):0;
+      return {nome,val,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
+    });
+    const abcBadge=cls=>({A:'<span class="badge badge-green">Classe A</span>',B:'<span class="badge badge-amber">Classe B</span>',C:'<span class="badge badge-gray">Classe C</span>'}[cls]);
+    const abcBar=(pct,cls)=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:5px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${cls==='A'?'var(--green)':cls==='B'?'var(--gold)':'var(--text-3)'};border-radius:2px"></div></div><span style="font-size:11px">${pct}%</span></div>`;
+    el.insertAdjacentHTML('beforeend',`
+    <div class="cgrid" style="margin-top:16px">
+      <div class="card">
+        <div class="card-header"><div><h3>Curva ABC — Contratos</h3><div class="card-sub">Por valor total contratado</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Cliente / Contrato</th><th>Valor</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
+          <tbody>${abcCts.map(ct=>`<tr>
+            <td><div class="tpri">${ct.clientes?ct.clientes.nome:'—'}</div><div style="font-size:11px;color:var(--text-3)">${ct.descricao}</div></td>
+            <td class="td-mono">${fmt(ct.valor_total)}</td>
+            <td class="td-mono">${ct.pct}%</td>
+            <td>${abcBar(ct.acumPct,ct.cls)}</td>
+            <td>${abcBadge(ct.cls)}</td>
+          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem contratos</p></div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h3>Curva ABC — Produtos</h3><div class="card-sub">Por receita realizada (pagos)</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Produto / Categoria</th><th>Receita</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
+          <tbody>${abcProd.map(p=>`<tr>
+            <td class="tpri">${p.nome}</td>
+            <td class="td-mono">${fmt(p.val)}</td>
+            <td class="td-mono">${p.pct}%</td>
+            <td>${abcBar(p.acumPct,p.cls)}</td>
+            <td>${abcBadge(p.cls)}</td>
+          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem lançamentos pagos</p></div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+    </div>`);
+
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 

@@ -385,7 +385,9 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="sb-sec">Financeiro</div>
       <div class="sb-item" id="nav-lancamentos" onclick="navigate('lancamentos')"><i class="ti ti-arrows-exchange"></i>Lançamentos</div>
       <div class="sb-item" id="nav-metas" onclick="navigate('metas')"><i class="ti ti-target"></i>Metas</div>
+      <div class="sb-item" id="nav-funil" onclick="navigate('funil')"><i class="ti ti-filter"></i>Funil comercial</div>
       <div class="sb-sec">Análise</div>
+      <div class="sb-item" id="nav-analise" onclick="navigate('analise')"><i class="ti ti-chart-pie"></i>Análise</div>
       <div class="sb-item" id="nav-relatorios" onclick="navigate('relatorios')"><i class="ti ti-chart-bar"></i>Relatórios</div>
     </nav>
     <div class="sb-foot">
@@ -427,6 +429,19 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="topbar"><div><div class="pg-title">Metas Mensais</div><div class="pg-sub">Definição de metas por front e período</div></div><button class="btn btn-pri" onclick="openMetaModal()"><i class="ti ti-plus"></i>Definir meta</button></div>
       <div class="tb-div"></div>
       <div class="content" id="metas-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
+    </div>
+    <div id="section-funil" class="section">
+      <div class="topbar">
+        <div><div class="pg-title">Funil Comercial</div><div class="pg-sub">Gestão de leads e oportunidades</div></div>
+        <button class="btn btn-pri" onclick="openLeadModal()"><i class="ti ti-plus"></i>Novo lead</button>
+      </div>
+      <div class="tb-div"></div>
+      <div class="content" id="funil-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
+    </div>
+    <div id="section-analise" class="section">
+      <div class="topbar"><div><div class="pg-title">Análise</div><div class="pg-sub">Concentração de risco e rentabilidade por front</div></div></div>
+      <div class="tb-div"></div>
+      <div class="content" id="analise-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
     </div>
     <div id="section-relatorios" class="section">
       <div class="topbar"><div><div class="pg-title">Relatórios</div><div class="pg-sub">Exportação de dados</div></div></div>
@@ -500,6 +515,8 @@ function loadSection(sec){
   else if(sec==='medicoes')loadMedicoes();
   else if(sec==='lancamentos')loadLancamentos();
   else if(sec==='metas')loadMetas();
+  else if(sec==='funil')loadFunil();
+  else if(sec==='analise')loadAnalise();
   else if(sec==='relatorios')loadRelatorios();
 }
 
@@ -1197,6 +1214,281 @@ async function deleteMeta(id){
   if(!confirm('Excluir esta meta?'))return;
   try{await dbDelete('metas_mensais',id);notify('Meta excluída','info');loadMetas();}
   catch(e){notify('Erro: '+e.message,'error');}
+}
+
+// ── FUNIL COMERCIAL ──
+const ETAPAS = ['Lead','Contato feito','Diagnóstico agendado','Proposta enviada','Negociação','Fechado','Perdido'];
+const TEMP_CONFIG = {
+  'Quente':  {cls:'badge-red',   icon:'ti-flame',        cor:'var(--red)'},
+  'Morno':   {cls:'badge-amber', icon:'ti-flame',        cor:'var(--amber)'},
+  'Frio':    {cls:'badge-gray',  icon:'ti-snowflake',    cor:'var(--text-3)'},
+};
+const ETAPA_CONFIG = {
+  'Lead':                 {cls:'b-gray',  cor:'#9090b0'},
+  'Contato feito':        {cls:'b-blue',  cor:'var(--blue)'},
+  'Diagnóstico agendado': {cls:'b-blue',  cor:'var(--blue)'},
+  'Proposta enviada':     {cls:'badge-amber', cor:'var(--amber)'},
+  'Negociação':           {cls:'badge-amber', cor:'var(--amber)'},
+  'Fechado':              {cls:'badge-green', cor:'var(--green)'},
+  'Perdido':              {cls:'badge-red',   cor:'var(--red)'},
+};
+
+async function loadFunil(){
+  const el=document.getElementById('funil-content');
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
+  try{
+    let q=`select=*&order=criado_em.desc`;
+    if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
+    const leads=await dbGet('leads',q);
+
+    // KPIs do funil
+    const ativos=leads.filter(l=>l.etapa!=='Fechado'&&l.etapa!=='Perdido');
+    const fechados=leads.filter(l=>l.etapa==='Fechado');
+    const perdidos=leads.filter(l=>l.etapa==='Perdido');
+    const quentes=leads.filter(l=>l.temperatura==='Quente'&&l.etapa!=='Fechado'&&l.etapa!=='Perdido');
+    const vlrPotencial=ativos.reduce((s,l)=>s+Number(l.valor_potencial||0),0);
+    const txConversao=leads.length>0?Math.round((fechados.length/leads.length)*100):0;
+
+    // Contagem por etapa para o kanban visual
+    const porEtapa={};
+    ETAPAS.forEach(e=>porEtapa[e]=leads.filter(l=>l.etapa===e));
+
+    // Kanban resumo
+    const kanbanHtml = ETAPAS.filter(e=>e!=='Fechado'&&e!=='Perdido').map(e=>{
+      const its=porEtapa[e]||[];
+      const total=its.reduce((s,l)=>s+Number(l.valor_potencial||0),0);
+      return `<div style="flex:1;min-width:120px;background:var(--surface-2);border-radius:var(--rlg);padding:12px;border:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${e}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--blue)">${its.length}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px">${fmt(total)}</div>
+        ${its.filter(l=>l.temperatura==='Quente').length>0?`<div style="margin-top:6px;font-size:11px;color:var(--red);font-weight:600"><i class="ti ti-flame"></i> ${its.filter(l=>l.temperatura==='Quente').length} quente${its.filter(l=>l.temperatura==='Quente').length>1?'s':''}</div>`:''}
+      </div>`;
+    }).join('');
+
+    const rows=leads.map(l=>{
+      const tc=TEMP_CONFIG[l.temperatura]||TEMP_CONFIG['Morno'];
+      const ec=ETAPA_CONFIG[l.etapa]||{cls:'b-gray'};
+      return `<tr data-etapa="${l.etapa}" data-temp="${l.temperatura}" data-busca="${(l.nome+(l.produto||'')+(l.origem||'')).toLowerCase()}">
+        <td><strong style="color:var(--blue)">${l.nome}</strong>${l.email?`<div style="font-size:11px;color:var(--text-3)">${l.email}</div>`:''}</td>
+        <td>${frontTag(l.front)}</td>
+        <td style="font-size:12px;color:var(--text-2)">${l.produto||'—'}</td>
+        <td><span class="badge ${ec.cls}">${l.etapa}</span></td>
+        <td><span class="badge ${tc.cls}"><i class="ti ${tc.icon}"></i> ${l.temperatura}</span></td>
+        <td><strong>${l.valor_potencial?fmt(l.valor_potencial):'—'}</strong></td>
+        <td style="font-size:12px;color:var(--text-2)">${l.origem||'—'}</td>
+        <td style="font-size:12px;color:var(--text-3)">${fmtDate(l.data_entrada)}</td>
+        <td><div class="td-actions">
+          <button class="btn btn-out2 btn-sm" onclick="openLeadModal(${JSON.stringify(l).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-del btn-sm" onclick="deleteLead('${l.id}')"><i class="ti ti-trash"></i></button>
+        </div></td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML=`
+    <div class="kpi-grid" style="margin-bottom:16px">
+      <div class="kpi-card navy"><div class="kpi-icon b"><i class="ti ti-users"></i></div><div class="kpi-label">Leads ativos</div><div class="kpi-value">${ativos.length}</div><div class="ksub">${quentes.length} quente${quentes.length!==1?'s':''}</div></div>
+      <div class="kpi-card gold"><div class="kpi-icon a"><i class="ti ti-coin"></i></div><div class="kpi-label">Valor potencial</div><div class="kpi-value">${fmt(vlrPotencial)}</div><div class="ksub">Em negociação ativa</div></div>
+      <div class="kpi-card success"><div class="kpi-icon g"><i class="ti ti-trophy"></i></div><div class="kpi-label">Fechados</div><div class="kpi-value">${fechados.length}</div><div class="ksub">Taxa: ${txConversao}%</div></div>
+      <div class="kpi-card danger"><div class="kpi-icon r"><i class="ti ti-x"></i></div><div class="kpi-label">Perdidos</div><div class="kpi-value">${perdidos.length}</div><div class="ksub">de ${leads.length} total</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px">${kanbanHtml}</div>
+    <div class="fbar" style="margin-bottom:12px">
+      <span class="filter-label">Etapa</span>
+      <select id="fl-etapa" onchange="applyFunilFilter()" style="min-width:160px">
+        <option value="">Todas</option>
+        ${ETAPAS.map(e=>`<option value="${e}">${e}</option>`).join('')}
+      </select>
+      <div class="fsep"></div>
+      <span class="filter-label">Temperatura</span>
+      <select id="fl-temp" onchange="applyFunilFilter()">
+        <option value="">Todas</option>
+        <option value="Quente">🔴 Quente</option>
+        <option value="Morno">🟡 Morno</option>
+        <option value="Frio">⚪ Frio</option>
+      </select>
+      <div class="fsep"></div>
+      <input placeholder="Buscar lead, produto..." id="fl-lead-busca" oninput="applyFunilFilter()" style="max-width:220px;height:28px;font-size:12px">
+    </div>
+    <div class="card"><div class="tw"><table id="funil-table">
+      <thead><tr><th>Lead</th><th>Front</th><th>Produto</th><th>Etapa</th><th>Temperatura</th><th>Valor potencial</th><th>Origem</th><th>Entrada</th><th style="width:80px"></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="9"><div class="empty"><i class="ti ti-filter"></i><div class="et">Nenhum lead cadastrado</div></div></td></tr>`}</tbody>
+    </table></div></div>`;
+  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
+}
+
+function applyFunilFilter(){
+  const etapa=document.getElementById('fl-etapa').value;
+  const temp=document.getElementById('fl-temp').value;
+  const busca=document.getElementById('fl-lead-busca').value.toLowerCase();
+  document.querySelectorAll('#funil-table tbody tr').forEach(tr=>{
+    const ok=(!etapa||tr.dataset.etapa===etapa)&&(!temp||tr.dataset.temp===temp)&&(!busca||tr.dataset.busca.includes(busca));
+    tr.style.display=ok?'':'none';
+  });
+}
+
+async function openLeadModal(l){
+  openModal(`<div class="modal">
+    <div class="mh"><h3>${l?'Editar lead':'Novo lead'}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
+    <div class="mb"><div class="fg">
+      <div class="fs">Identificação</div>
+      <div class="fr">
+        <div><label>Nome *</label><input id="ld-nome" value="${l?l.nome:''}" placeholder="Nome do lead ou empresa"></div>
+        <div><label>Telefone</label><input id="ld-tel" value="${l?l.telefone||'':''}" placeholder="(84) 9 0000-0000"></div>
+      </div>
+      <div class="fr">
+        <div><label>E-mail</label><input id="ld-email" type="email" value="${l?l.email||'':''}" placeholder="email@exemplo.com"></div>
+        <div><label>Origem</label><input id="ld-origem" value="${l?l.origem||'':''}" placeholder="Instagram, indicação, LinkedIn..."></div>
+      </div>
+      <div class="fs">Qualificação</div>
+      <div class="fr">
+        <div><label>Front *</label><select id="ld-front">
+          <option value="Nacasa Comunicação" ${!l||l.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option>
+          <option value="Nacasa Educação" ${l&&l.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option>
+        </select></div>
+        <div><label>Produto de interesse</label><input id="ld-produto" value="${l?l.produto||'':''}" placeholder="Ex: ECOAR, Gestão de conteúdo..."></div>
+      </div>
+      <div class="fr">
+        <div><label>Etapa *</label><select id="ld-etapa">
+          ${ETAPAS.map(e=>`<option value="${e}" ${l&&l.etapa===e?'selected':''}>${e}</option>`).join('')}
+        </select></div>
+        <div><label>Temperatura *</label><select id="ld-temp">
+          <option value="Quente" ${l&&l.temperatura==='Quente'?'selected':''}>🔴 Quente</option>
+          <option value="Morno" ${!l||l.temperatura==='Morno'?'selected':''}>🟡 Morno</option>
+          <option value="Frio" ${l&&l.temperatura==='Frio'?'selected':''}>⚪ Frio</option>
+        </select></div>
+      </div>
+      <div class="fr">
+        <div><label>Valor potencial (R$)</label><input id="ld-val" type="number" step="0.01" value="${l?l.valor_potencial||'':''}" placeholder="0,00"></div>
+        <div><label>Responsável</label><input id="ld-resp" value="${l?l.responsavel||'':''}" placeholder="Tiago Souza"></div>
+      </div>
+      <div><label>Observação</label><textarea id="ld-obs" rows="2">${l?l.observacao||'':''}</textarea></div>
+      ${l&&l.etapa==='Perdido'?`<div><label>Motivo da perda</label><input id="ld-motivo" value="${l.motivo_perda||''}" placeholder="Ex: Preço, concorrente, timing..."></div>`:'<div style="display:none"><input id="ld-motivo" value=""></div>'}
+    </div></div>
+    <div class="mf">
+      <button class="btn btn-out2" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-pri" onclick="saveLead(${l?`'${l.id}'`:'null'})"><i class="ti ti-check"></i> Salvar lead</button>
+    </div>
+  </div>`);
+}
+
+async function saveLead(id){
+  const data={
+    nome:document.getElementById('ld-nome').value.trim(),
+    telefone:document.getElementById('ld-tel').value.trim(),
+    email:document.getElementById('ld-email').value.trim(),
+    origem:document.getElementById('ld-origem').value.trim(),
+    front:document.getElementById('ld-front').value,
+    produto:document.getElementById('ld-produto').value.trim(),
+    etapa:document.getElementById('ld-etapa').value,
+    temperatura:document.getElementById('ld-temp').value,
+    valor_potencial:parseFloat(document.getElementById('ld-val').value)||null,
+    responsavel:document.getElementById('ld-resp').value.trim(),
+    observacao:document.getElementById('ld-obs').value.trim(),
+    motivo_perda:document.getElementById('ld-motivo').value.trim()||null,
+  };
+  if(!data.nome){notify('Nome é obrigatório','error');return;}
+  try{
+    id?await dbUpdate('leads',id,data):await dbInsert('leads',data);
+    closeModalForce();
+    notify(id?'Lead atualizado':'Lead cadastrado','success');
+    loadFunil();
+  }catch(e){notify('Erro: '+e.message,'error');}
+}
+
+async function deleteLead(id){
+  if(!confirm('Excluir este lead?'))return;
+  try{await dbDelete('leads',id);notify('Lead excluído','info');loadFunil();}
+  catch(e){notify('Erro: '+e.message,'error');}
+}
+
+// ── ANÁLISE ──
+async function loadAnalise(){
+  const el=document.getElementById('analise-content');
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
+  try{
+    // Buscar lançamentos pagos do ano
+    const ano=new Date().getFullYear();
+    let q=`select=*,clientes(nome)&tipo=eq.entrada&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
+    const entradas=await dbGet('lancamentos',q);
+    let qd=`select=*&tipo=eq.saida&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
+    const saidas=await dbGet('lancamentos',qd);
+
+    // Rentabilidade por front
+    const fronts=['Nacasa Comunicação','Nacasa Educação'];
+    const rentab=fronts.map(f=>({
+      front:f,
+      receita:entradas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
+      despesa:saidas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
+    })).map(f=>({...f,margem:f.receita-f.despesa,pct:f.receita>0?Math.round(((f.receita-f.despesa)/f.receita)*100):0}));
+
+    // Concentração por cliente
+    const totalRec=entradas.reduce((s,l)=>s+Number(l.valor),0);
+    const porCliente={};
+    entradas.forEach(l=>{
+      const nome=l.clientes?l.clientes.nome:'Sem cliente';
+      porCliente[nome]=(porCliente[nome]||0)+Number(l.valor);
+    });
+    const ranking=Object.entries(porCliente).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>({
+      nome,val,pct:totalRec>0?Math.round((val/totalRec)*100):0
+    }));
+
+    const rentRows=rentab.map(f=>`<tr>
+      <td>${frontTag(f.front)}</td>
+      <td class="td-mono" style="color:var(--green)"><strong>${fmt(f.receita)}</strong></td>
+      <td class="td-mono" style="color:var(--red)">${fmt(f.despesa)}</td>
+      <td class="td-mono"><strong>${fmt(f.margem)}</strong></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="width:${Math.max(0,f.pct)}%;height:100%;background:${f.pct>=50?'var(--green)':f.pct>=30?'var(--gold)':'var(--red)'};border-radius:3px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:${f.pct>=50?'var(--green)':f.pct>=30?'var(--amber)':'var(--red)'}">${f.pct}%</span>
+        </div>
+      </td>
+    </tr>`).join('');
+
+    const concRows=ranking.map(r=>`<tr>
+      <td class="tpri">${r.nome}</td>
+      <td class="td-mono"><strong>${fmt(r.val)}</strong></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="width:${r.pct}%;height:100%;background:${r.pct>30?'var(--red)':r.pct>15?'var(--gold)':'var(--green)'};border-radius:3px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:${r.pct>30?'var(--red)':r.pct>15?'var(--amber)':'var(--green)'}">${r.pct}%</span>
+        </div>
+      </td>
+      <td>${r.pct>30?'<span class="badge badge-red badge-dot">Risco alto</span>':r.pct>15?'<span class="badge badge-amber badge-dot">Atenção</span>':'<span class="badge badge-green badge-dot">Saudável</span>'}</td>
+    </tr>`).join('');
+
+    const riscoAlert=ranking.filter(r=>r.pct>30);
+
+    el.innerHTML=`
+    ${riscoAlert.length>0?`
+    <div style="background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--rlg);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <i class="ti ti-alert-triangle" style="font-size:20px;color:var(--red);flex-shrink:0"></i>
+      <div>
+        <div style="font-weight:600;color:var(--red);font-size:13px">Concentração de risco elevada</div>
+        <div style="font-size:12px;color:var(--red-text);margin-top:2px">${riscoAlert.map(r=>`<strong>${r.nome}</strong> representa ${r.pct}% da receita`).join(' · ')}</div>
+      </div>
+    </div>`:''}
+    <div class="cgrid">
+      <div class="card">
+        <div class="card-header"><div><h3>Rentabilidade por front</h3><div class="card-sub">${ano} — receitas e despesas pagas</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Front</th><th>Receita</th><th>Despesa</th><th>Margem</th><th>Margem %</th></tr></thead>
+          <tbody>${rentRows||'<tr><td colspan="5"><div class="empty" style="padding:24px"><p>Sem dados suficientes</p></div></td></tr>'}</tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h3>Concentração por cliente</h3><div class="card-sub">% da receita total — alerta acima de 30%</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Cliente</th><th>Receita</th><th>Concentração</th><th>Risco</th></tr></thead>
+          <tbody>${concRows||'<tr><td colspan="4"><div class="empty" style="padding:24px"><p>Sem dados suficientes</p></div></td></tr>'}</tbody>
+        </table></div>
+      </div>
+    </div>`;
+  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 
 // ── RELATÓRIOS ──

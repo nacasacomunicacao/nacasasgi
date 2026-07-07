@@ -984,6 +984,19 @@ async function loadClientes(){
         <button class="btn btn-danger btn-xs" onclick="deleteCliente('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><i class="ti ti-users"></i><div class="empty-title">Nenhum cliente cadastrado</div><p>Clique em "Novo cliente" para começar.</p></div></td></tr>`}</tbody>
+        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
+      <tr>
+        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
+          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
+        </td>
+        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
+        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
+        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
+        <td colspan="2" style="padding:10px 14px"></td>
+      </tr>
+    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1061,21 +1074,35 @@ async function loadContratos(){
       <input placeholder="Buscar contrato..." oninput="filterTable(this,'ct-table')" style="max-width:220px">
     </div>
     <div class="card"><div class="table-wrap"><table id="ct-table">
-    <thead><tr><th>Cliente</th><th>Front</th><th>Descrição</th><th>Valor total</th><th>Cobrança</th><th>Vigência</th><th>Status</th><th style="width:150px"></th></tr></thead>
+    <thead><tr><th>Cliente</th><th>Front</th><th>Produto</th><th>Descrição</th><th>Valor total</th><th>Cobrança</th><th>Vigência</th><th>Status</th><th style="width:150px"></th></tr></thead>
     <tbody>${rows.length?rows.map(r=>`<tr data-status="${r.status}">
       <td><div class="td-primary">${r.clientes?r.clientes.nome:'—'}</div></td>
       <td>${frontTag(r.front)}</td>
+      <td style="font-size:12px;color:var(--text-2)">${r.produto||'—'}</td>
       <td style="color:var(--text-2)">${r.descricao}</td>
       <td class="td-mono"><strong>${fmt(r.valor_total)}</strong></td>
       <td><span class="badge badge-gray">${tipoLabel(r.tipo_cobranca)}</span></td>
       <td style="color:var(--text-2);font-size:12px">${fmtDate(r.data_inicio)}${r.data_fim?' → '+fmtDate(r.data_fim):' → aberto'}</td>
       <td>${statusBadge(r.status)}</td>
       <td><div class="td-actions">
-        <button class="btn btn-outline btn-xs" onclick="navigate('medicoes');window._ctFilter='${r.id}'"><i class="ti ti-ruler-measure"></i> Medições</button>
-        <button class="btn btn-outline btn-xs" onclick="openContratoModal(${JSON.stringify(r).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-danger btn-xs" onclick="deleteContrato('${r.id}')"><i class="ti ti-trash"></i></button>
-      </div></td>
-    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><i class="ti ti-file-description"></i><div class="empty-title">Nenhum contrato cadastrado</div><p>Clique em "Novo contrato" para começar.</p></div></td></tr>`}</tbody>
+          <button class="btn btn-out2 btn-xs" onclick="navigate('medicoes');window._ctFilter='${r.id}'"><i class="ti ti-ruler-measure"></i> Medições</button>
+          <button class="btn btn-outline btn-xs" onclick="openContratoModal(${JSON.stringify(r).replace(/&quot;/g,'\"')})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-danger btn-xs" onclick="deleteContrato('${r.id}')"><i class="ti ti-trash"></i></button>
+        </div></td>
+    </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><i class="ti ti-file-description"></i><div class="empty-title">Nenhum contrato cadastrado</div><p>Clique em "Novo contrato" para começar.</p></div></td></tr>`}</tbody>
+        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
+      <tr>
+        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
+          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
+        </td>
+        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
+        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
+        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
+        <td colspan="2" style="padding:10px 14px"></td>
+      </tr>
+    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1093,6 +1120,10 @@ async function openContratoModal(c){
         <div><label>Status</label><select id="ct-status">${['ativo','pausado','encerrado','cancelado'].map(s=>`<option value="${s}" ${c&&c.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
       <div><label>Descrição do contrato *</label><input id="ct-desc" value="${c?c.descricao:''}" placeholder="Ex: Gestão de conteúdo — pacote mensal"></div>
+      <div><label>Produto (para controle de capacidade e metas)</label><select id="ct-produto">
+        <option value="">— Nenhum específico —</option>
+        ${PRODUTOS_PADRAO.map(p=>`<option value="${p}" ${c&&c.produto===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>
       <div class="form-section">Valores e prazos</div>
       <div class="form-row">
         <div><label>Valor total (R$) *</label><input id="ct-val" type="number" step="0.01" value="${c?c.valor_total:''}" placeholder="0,00"></div>
@@ -1112,11 +1143,105 @@ async function openContratoModal(c){
 }
 
 async function saveContrato(id){
-  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:document.getElementById('ct-desc').value.trim(),valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
+  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:document.getElementById('ct-desc').value.trim(),produto:document.getElementById('ct-produto').value||null,valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
   if(!data.descricao){notify('Descrição é obrigatória','error');return;}
-  try{id?await dbUpdate('contratos',id,data):await dbInsert('contratos',data);closeModalForce();notify(id?'Contrato atualizado':'Contrato cadastrado','success');loadContratos();}
-  catch(e){notify('Erro: '+e.message,'error');}
+  if(!data.data_inicio||!data.data_fim){notify('Data de início e fim são obrigatórias','error');return;}
+  try{
+    let contratoId = id;
+    if(id){
+      await dbUpdate('contratos',id,data);
+      notify('Contrato atualizado','success');
+    } else {
+      const novo = await dbInsert('contratos',data);
+      if(novo&&novo[0]) contratoId = novo[0].id;
+      notify('Contrato cadastrado — gerando medições...','info');
+    }
+    // Gerar medições apenas para novos contratos
+    if(!id && contratoId){
+      await gerarMedicoesAuto(contratoId, data);
+    }
+    closeModalForce();
+    loadContratos();
+  }catch(e){notify('Erro: '+e.message,'error');}
 }
+
+async function gerarMedicoesAuto(contratoId, data){
+  const inicio = new Date(data.data_inicio+'T12:00:00');
+  const fim = new Date(data.data_fim+'T12:00:00');
+  const meses = [];
+  if(data.tipo_cobranca==='mensal_fixo'){
+    const d = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+    const fimMes = new Date(fim.getFullYear(), fim.getMonth(), 1);
+    while(d <= fimMes){
+      meses.push(d.toISOString().slice(0,7)+'-01');
+      d.setMonth(d.getMonth()+1);
+    }
+  } else {
+    // Por projeto ou por entrega: uma única medição
+    meses.push(new Date(inicio.getFullYear(), inicio.getMonth(), 1).toISOString().slice(0,7)+'-01');
+  }
+  const nMeses = meses.length || 1;
+  const valorPrevisto = data.tipo_cobranca==='mensal_fixo'
+    ? Math.round((data.valor_total/nMeses)*100)/100
+    : data.valor_total;
+  try{
+    await Promise.all(meses.map(mes=>dbInsert('medicoes',{
+      contrato_id: contratoId,
+      mes_referencia: mes,
+      valor_previsto: valorPrevisto,
+      valor_medido: 0,
+      status: 'pendente',
+      observacao: null
+    })));
+    notify(`${meses.length} medição(ões) gerada(s) automaticamente`,'success');
+  }catch(e){
+    console.warn('Erro ao gerar medições:', e.message);
+    notify('Contrato salvo, mas erro ao gerar medições: '+e.message,'error');
+  }
+}
+async function gerarMedicoes(contratoId, dataInicio, dataFim, valorTotal){
+  const inicio = new Date(dataInicio+'T12:00:00');
+  const fim = new Date(dataFim+'T12:00:00');
+
+  // Calcular meses do período
+  const meses = [];
+  const d = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  while(d <= fim){
+    meses.push(d.toISOString().slice(0,7)+'-01');
+    d.setMonth(d.getMonth()+1);
+  }
+
+  if(meses.length === 0){ notify('Período inválido','error'); return; }
+
+  const valorMes = Math.round((Number(valorTotal) / meses.length)*100)/100;
+
+  // Verificar medições já existentes para este contrato
+  const existentes = await dbGet('medicoes', `select=mes_referencia&contrato_id=eq.${contratoId}`);
+  const mesesExist = new Set(existentes.map(m=>m.mes_referencia));
+  const novas = meses.filter(m=>!mesesExist.has(m));
+
+  if(novas.length === 0){
+    notify('Todas as medições já existem para este contrato','info');
+    return;
+  }
+
+  const confirmMsg = `Gerar ${novas.length} medição(ões) de ${fmt(valorMes)}/mês?${mesesExist.size>0?' ('+mesesExist.size+' já existente(s) serão mantidas)':''}`;
+  if(!confirm(confirmMsg)) return;
+
+  try{
+    await Promise.all(novas.map(mes =>
+      dbInsert('medicoes',{
+        contrato_id: contratoId,
+        mes_referencia: mes,
+        valor_previsto: valorMes,
+        valor_medido: 0,
+        observacao: 'Gerado automaticamente'
+      })
+    ));
+    notify(`${novas.length} medição(ões) criada(s) com sucesso!`,'success');
+  }catch(e){ notify('Erro: '+e.message,'error'); }
+}
+
 async function deleteContrato(id){
   if(!confirm('Excluir este contrato? As medições vinculadas também serão removidas.'))return;
   try{await dbDelete('contratos',id);notify('Contrato excluído','info');loadContratos();}
@@ -1126,82 +1251,209 @@ async function deleteContrato(id){
 // ── MEDIÇÕES ──
 async function loadMedicoes(){
   const el=document.getElementById('medicoes-content');
-  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
-    // Gráfico de evolução — carregado se filtro de contrato ativo
-    const medChartContrato = window._ctFilter||'';
-    let ctQ=`select=id,descricao,front,clientes(nome)&status=eq.ativo&order=criado_em.desc`;
+    const medChartContrato=window._ctFilter||'';
+    let ctQ=`select=id,descricao,front,clientes(nome)&order=criado_em.desc`;
     if(FRONT)ctQ+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const contratos=await dbGet('contratos',ctQ);
-    const meds=await dbGet('medicoes','select=*,contratos(descricao,clientes(nome))&order=mes_referencia.desc');
-    const filter=window._ctFilter||'';
+
+    let medQ=`select=*,contratos(descricao,valor_total,front,clientes(nome))&order=contrato_id.asc,mes_referencia.asc`;
+    let meds=await dbGet('medicoes',medQ);
+    // Filtrar por front se selecionado (via contrato vinculado)
+    if(FRONT) meds=meds.filter(m=>m.contratos&&m.contratos.front===FRONT);
+    window._medsCache = meds; // cache para totais
+
     el.innerHTML=`
-    <div class="filter-bar">
+    <div class="fbar" style="margin-bottom:12px">
       <span class="filter-label">Contrato</span>
-      <select id="med-filter" onchange="filterByData(this,'md-table','contrato')" style="min-width:260px">
+      <select id="med-ct-filter" onchange="applyMedFilter()" style="min-width:220px">
         <option value="">Todos os contratos</option>
-        ${contratos.map(c=>`<option value="${c.id}" ${filter===c.id?'selected':''}>${c.clientes?c.clientes.nome+' — ':''}${c.descricao}</option>`).join('')}
+        ${contratos.map(ct=>`<option value="${ct.id}" ${medChartContrato===ct.id?'selected':''}>${ct.clientes?ct.clientes.nome+' — ':''}${ct.descricao}</option>`).join('')}
+      </select>
+      <div class="fsep"></div>
+      <span class="filter-label">De</span>
+      <input type="month" id="med-mes-de" onchange="applyMedFilter()" style="min-width:130px;height:28px;font-size:12px">
+      <span class="filter-label">Até</span>
+      <input type="month" id="med-mes-ate" onchange="applyMedFilter()" style="min-width:130px;height:28px;font-size:12px">
+      <div class="fsep"></div>
+      <span class="filter-label">Status</span>
+      <select id="med-status-filter" onchange="applyMedFilter()">
+        <option value="">Todos</option>
+        <option value="pendente">Pendente</option>
+        <option value="pago">Pago</option>
       </select>
     </div>
-    <div class="card"><div class="table-wrap"><table id="md-table">
-    <thead><tr><th>Contrato / Cliente</th><th>Mês ref.</th><th>Previsto</th><th>Medido</th><th>Saldo</th><th>Desvio</th><th>Observação</th><th style="width:90px"></th></tr></thead>
+    <div class="card"><div class="tw"><table id="med-table">
+    <thead><tr>
+      <th>Contrato / Cliente</th><th>Mês</th><th>Previsto</th>
+      <th>Realizado</th><th>Saldo</th><th>Desvio</th><th>Status</th><th>Pago em</th><th style="width:100px"></th>
+    </tr></thead>
     <tbody>${meds.length?meds.map(m=>{
       const dev=Number(m.desvio_percentual);
       const dc=dev>0?'dev-pos':dev<0?'dev-neg':'dev-zero';
-      return`<tr data-contrato="${m.contrato_id}">
-        <td><div class="td-primary">${m.contratos?m.contratos.clientes?m.contratos.clientes.nome:'—':'—'}</div>${m.contratos?`<div style="font-size:11px;color:var(--text-3);margin-top:1px">${m.contratos.descricao}</div>`:''}</td>
+      const isPago=(m.status||'pendente')==='pago';
+      return `<tr data-contrato="${m.contrato_id}" data-mes="${m.mes_referencia?m.mes_referencia.slice(0,7):''}" data-status="${m.status||'pendente'}" data-prev="${m.valor_previsto||0}" data-real="${m.valor_medido||0}">
+        <td><div class="tpri">${m.contratos?m.contratos.clientes?m.contratos.clientes.nome:'—':'—'}</div>
+            <div style="font-size:11px;color:var(--text-3)">${m.contratos?m.contratos.descricao:''}</div></td>
         <td style="font-weight:500">${fmtMonth(m.mes_referencia)}</td>
         <td class="td-mono">${fmt(m.valor_previsto)}</td>
-        <td class="td-mono"><strong>${fmt(m.valor_medido)}</strong></td>
-        <td class="td-mono" style="color:var(--text-2)">${fmt(m.saldo)}</td>
-        <td class="${dc}">${dev>0?'+':''}${dev.toFixed(1)}%</td>
-        <td style="color:var(--text-2)">${m.observacao||'—'}</td>
+        <td class="td-mono"><strong>${m.valor_medido>0?fmt(m.valor_medido):'<span style="color:var(--text-3)">—</span>'}</strong></td>
+        <td class="td-mono" style="color:var(--text-2)">${m.valor_medido>0?fmt(m.saldo):'—'}</td>
+        <td class="${dc}">${m.valor_medido>0?(dev>0?'+':'')+dev.toFixed(1)+'%':'—'}</td>
+        <td>${isPago?'<span class="badge badge-green badge-dot">Pago</span>':'<span class="badge badge-amber badge-dot">Pendente</span>'}</td>
+        <td style="font-size:12px;color:var(--text-2)">${fmtDate(m.data_pagamento)}</td>
         <td><div class="td-actions">
-          <button class="btn btn-outline btn-xs" onclick="openMedicaoModal(${JSON.stringify(m).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-danger btn-xs" onclick="deleteMedicao('${m.id}')"><i class="ti ti-trash"></i></button>
+          ${!isPago?`<button class="btn btn-out2 btn-xs" title="Marcar como pago" onclick="marcarPago('${m.id}',${m.valor_medido},${m.valor_previsto},'${m.contrato_id}')"><i class="ti ti-circle-check"></i> Pagar</button>`:''}
+          ${isPago?`<button class="btn btn-del btn-xs" title="Estornar pagamento" onclick="estornarPagamento('${m.id}','${m.lancamento_id||''}')"><i class="ti ti-rotate-clockwise"></i></button>`:''}
+          <button class="btn btn-out2 btn-xs" onclick="openMedicaoModal(${JSON.stringify(m).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-del btn-xs" onclick="deleteMedicao('${m.id}')"><i class="ti ti-trash"></i></button>
         </div></td>
       </tr>`;
-    }).join(''):`<tr><td colspan="8"><div class="empty"><i class="ti ti-ruler-measure"></i><div class="empty-title">Nenhuma medição registrada</div><p>Registre o previsto e realizado por contrato e mês.</p></div></td></tr>`}</tbody>
+    }).join(''):`<tr><td colspan="9"><div class="empty"><i class="ti ti-ruler-measure"></i><div class="et">Nenhuma medição registrada</div><p>Cadastre um contrato para gerar medições automaticamente.</p></div></td></tr>`}</tbody>
+        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
+      <tr>
+        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
+          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
+        </td>
+        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
+        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
+        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
+        <td colspan="2" style="padding:10px 14px"></td>
+      </tr>
+    </tfoot>
     </table></div></div>`;
-    if(filter){filterByData({value:filter},'md-table','contrato');window._ctFilter='';}
 
-    // Gráfico por contrato se houver filtro ativo
-    if(medChartContrato && meds.length > 0){
-      const medsFiltradas = meds.filter(m=>m.contrato_id===medChartContrato).sort((a,b)=>a.mes_referencia.localeCompare(b.mes_referencia));
-      if(medsFiltradas.length > 0){
-        const contNome = medsFiltradas[0].contratos ? (medsFiltradas[0].contratos.clientes?medsFiltradas[0].contratos.clientes.nome+' — ':'')+medsFiltradas[0].contratos.descricao : '';
-        const chartDiv = document.createElement('div');
-        chartDiv.className = 'card';
-        chartDiv.style.marginBottom = '16px';
-        chartDiv.innerHTML = `
-          <div class="card-header"><div><h3>Evolução — ${contNome}</h3><div class="card-sub">Previsto × realizado mês a mês</div></div></div>
-          <div class="card-body"><div style="position:relative;height:220px"><canvas id="med-chart"></canvas></div></div>`;
-        el.insertBefore(chartDiv, el.querySelector('.card'));
+    // Calcular totais iniciais
+    applyMedFilter();
+
+    if(medChartContrato){
+      document.getElementById('med-ct-filter').value=medChartContrato;
+      applyMedFilter();
+      window._ctFilter='';
+    }
+
+    // Gráfico por contrato se filtro ativo
+    if(medChartContrato && meds.length>0){
+      const medsFiltradas=meds.filter(m=>m.contrato_id===medChartContrato)
+        .sort((a,b)=>a.mes_referencia.localeCompare(b.mes_referencia));
+      if(medsFiltradas.length>0){
+        const contNome=medsFiltradas[0].contratos?(medsFiltradas[0].contratos.clientes?medsFiltradas[0].contratos.clientes.nome+' — ':'')+medsFiltradas[0].contratos.descricao:'';
+        const chartDiv=document.createElement('div');
+        chartDiv.className='card';
+        chartDiv.style.marginBottom='16px';
+        chartDiv.innerHTML=`<div class="card-header"><div><h3>Evolução — ${contNome}</h3><div class="card-sub">Previsto × realizado mês a mês</div></div></div><div class="card-body"><div style="position:relative;height:220px"><canvas id="med-chart"></canvas></div></div>`;
+        el.insertBefore(chartDiv,el.querySelector('.card'));
         if(window._medChart){window._medChart.destroy();}
-        window._medChart = new Chart(document.getElementById('med-chart'),{
+        window._medChart=new Chart(document.getElementById('med-chart'),{
           type:'bar',
           data:{
             labels:medsFiltradas.map(m=>fmtMonth(m.mes_referencia)),
             datasets:[
               {label:'Previsto',data:medsFiltradas.map(m=>Number(m.valor_previsto)),backgroundColor:'rgba(43,63,212,.15)',borderColor:'rgba(43,63,212,.4)',borderWidth:1,borderRadius:3},
-              {label:'Medido',data:medsFiltradas.map(m=>Number(m.valor_medido)),backgroundColor:'#D4960A',borderRadius:3}
+              {label:'Realizado',data:medsFiltradas.map(m=>Number(m.valor_medido)),backgroundColor:'#D4960A',borderRadius:3}
             ]
           },
           options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>'R$'+Number(v).toLocaleString('pt-BR')},grid:{color:'#f0f0f0'},border:{display:false}},x:{grid:{display:false},border:{display:false}}}}
         });
       }
     }
-  // ── GRÁFICO previsto x realizado por contrato ──
-  if(contratos.length > 0){
-    const ctSelect = document.getElementById('med-filter');
-    const firstCt = contratos[0];
-    renderMedicaoChart(firstCt.id, meds);
-    ctSelect.addEventListener('change', function(){
-      renderMedicaoChart(this.value||null, meds);
-    });
-  }
-
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
+}
+
+function applyMedFilter(){
+  const ct=document.getElementById('med-ct-filter')?.value||'';
+  const de=document.getElementById('med-mes-de')?.value||'';
+  const ate=document.getElementById('med-mes-ate')?.value||'';
+  const status=document.getElementById('med-status-filter')?.value||'';
+  const meds=window._medsCache||[];
+
+  // Filtrar e mostrar/esconder linhas
+  const visibleIds=new Set();
+  document.querySelectorAll('#med-table tbody tr').forEach(tr=>{
+    const mes=tr.dataset.mes||'';
+    const trStatus=tr.dataset.status||'pendente';
+    const ok=(!ct||tr.dataset.contrato===ct)&&(!de||mes>=de)&&(!ate||mes<=ate)&&(!status||trStatus===status);
+    tr.style.display=ok?'':'none';
+    if(ok) visibleIds.add(tr.dataset.contrato+'_'+mes);
+  });
+
+  // Calcular totais a partir do cache (não do DOM)
+  let totPrev=0, totReal=0, pagoCount=0, totalCount=0;
+  meds.forEach(m=>{
+    const mes=m.mes_referencia?m.mes_referencia.slice(0,7):'';
+    const mStatus=m.status||'pendente';
+    const key=m.contrato_id+'_'+mes;
+    if(!visibleIds.has(key)) return;
+    totalCount++;
+    totPrev+=Number(m.valor_previsto||0);
+    totReal+=Number(m.valor_medido||0);
+    if(mStatus==='pago') pagoCount++;
+  });
+
+  // Atualizar rodapé
+  const saldo=totPrev-totReal;
+  const dev=totPrev>0?((totReal-totPrev)/totPrev*100):0;
+  const setEl=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+  const setCol=(id,val,cor)=>{const el=document.getElementById(id);if(el){el.textContent=val;if(cor)el.style.color=cor;}};
+  setEl('med-tot-prev', totalCount>0?fmt(totPrev):'—');
+  setCol('med-tot-real', totReal>0?fmt(totReal):'—', totReal>0?'var(--green)':'var(--text-3)');
+  setCol('med-tot-saldo', totReal>0?fmt(saldo):'—', saldo<0?'var(--red)':saldo>0?'var(--green)':'var(--text-3)');
+  setCol('med-tot-dev', totReal>0?(dev>=0?'+':'')+dev.toFixed(1)+'%':'—', dev>=0?'var(--green)':'var(--red)');
+  setEl('med-tot-pago', totalCount>0?`${pagoCount} de ${totalCount} pagos`:'—');
+}
+
+async function marcarPago(medicaoId, valorMedido, valorPrevisto, contratoId){
+  if(!valorMedido||Number(valorMedido)===0){
+    notify('Preencha o valor realizado antes de marcar como pago','error');
+    return;
+  }
+  try{
+    // Buscar dados do contrato para criar o lançamento
+    const cts=await dbGet('contratos',`select=id,descricao,front,cliente_id,clientes(nome)&id=eq.${contratoId}`);
+    const ct=cts[0];
+    if(!ct){notify('Contrato não encontrado','error');return;}
+
+    // Criar lançamento de entrada
+    const lancs=await dbInsert('lancamentos',{
+      front:ct.front,
+      tipo:'entrada',
+      status:'pago',
+      descricao:`Medição paga — ${ct.descricao}${ct.clientes?' ('+ct.clientes.nome+')':''}`,
+      valor:Number(valorMedido),
+      data_vencimento:new Date().toISOString().slice(0,10),
+      data_pagamento:new Date().toISOString().slice(0,10),
+      cliente_id:ct.cliente_id||null,
+      contrato_id:contratoId,
+      lancado_por:SESSION?.user?.id||null,
+    });
+
+    const lancamentoId=lancs&&lancs[0]?lancs[0].id:null;
+
+    // Atualizar medição como paga
+    await dbUpdate('medicoes',medicaoId,{
+      status:'pago',
+      lancamento_id:lancamentoId,
+      data_pagamento:new Date().toISOString().slice(0,10)
+    });
+
+    notify('Medição marcada como paga e lançamento criado!','success');
+    loadMedicoes();
+  }catch(e){notify('Erro: '+e.message,'error');}
+}
+
+async function estornarPagamento(medicaoId, lancamentoId){
+  if(!confirm('Estornar este pagamento? O lançamento de entrada será excluído.'))return;
+  try{
+    if(lancamentoId&&lancamentoId!=='null'&&lancamentoId!==''){
+      await dbDelete('lancamentos',lancamentoId);
+    }
+    await dbUpdate('medicoes',medicaoId,{status:'pendente',lancamento_id:null,data_pagamento:null});
+    notify('Pagamento estornado','info');
+    loadMedicoes();
+  }catch(e){notify('Erro: '+e.message,'error');}
 }
 
 let medChart = null;
@@ -1260,10 +1512,30 @@ async function openMedicaoModal(m){
 }
 async function saveMedicao(id){
   const mes=document.getElementById('md-mes').value;
-  const data={contrato_id:document.getElementById('md-ct').value||null,mes_referencia:mes?mes+'-01':null,valor_previsto:parseFloat(document.getElementById('md-prev').value)||0,valor_medido:parseFloat(document.getElementById('md-med').value)||0,observacao:document.getElementById('md-obs').value.trim()};
+  const data={
+    contrato_id:document.getElementById('md-ct').value||null,
+    mes_referencia:mes?mes+'-01':null,
+    valor_previsto:parseFloat(document.getElementById('md-prev').value)||0,
+    valor_medido:parseFloat(document.getElementById('md-med').value)||0,
+    observacao:document.getElementById('md-obs').value.trim()
+  };
   if(!data.contrato_id||!data.mes_referencia){notify('Contrato e mês são obrigatórios','error');return;}
-  try{id?await dbUpdate('medicoes',id,data):await dbInsert('medicoes',data);closeModalForce();notify(id?'Medição atualizada':'Medição registrada','success');loadMedicoes();}
-  catch(e){notify('Erro: '+e.message,'error');}
+  try{
+    if(id){
+      await dbUpdate('medicoes',id,data);
+      // Se medição já paga, atualizar o lançamento vinculado também
+      const meds=await dbGet('medicoes',`select=status,lancamento_id&id=eq.${id}`);
+      if(meds[0]&&meds[0].status==='pago'&&meds[0].lancamento_id){
+        await dbUpdate('lancamentos',meds[0].lancamento_id,{valor:data.valor_medido});
+      }
+      notify('Medição atualizada','success');
+    } else {
+      await dbInsert('medicoes',data);
+      notify('Medição registrada','success');
+    }
+    closeModalForce();
+    loadMedicoes();
+  }catch(e){notify('Erro: '+e.message,'error');}
 }
 async function deleteMedicao(id){
   if(!confirm('Excluir esta medição?'))return;
@@ -1320,6 +1592,19 @@ async function loadLancamentos(){
         <button class="btn btn-danger btn-xs" onclick="deleteLancamento('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`).join(''):`<tr><td colspan="11"><div class="empty"><i class="ti ti-arrows-exchange"></i><div class="empty-title">Nenhum lançamento registrado</div><p>Registre entradas e saídas para visualizar o fluxo de caixa.</p></div></td></tr>`}</tbody>
+        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
+      <tr>
+        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
+          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
+        </td>
+        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
+        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
+        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
+        <td colspan="2" style="padding:10px 14px"></td>
+      </tr>
+    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1489,18 +1774,41 @@ async function loadMetas(){
   try{
     let q=`select=*&order=mes_referencia.desc`;if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const rows=await dbGet('metas_mensais',q);
-    el.innerHTML=`
+
+    // ── PAINEL DE CAPACIDADE (vagas de produtos com limite simultâneo, ex: Consultoria R$45.000) ──
+    const contratosAtivos=await dbGet('contratos',`select=id,produto,clientes(nome),data_inicio,data_fim,status&status=eq.ativo`);
+    const capacidadeHtml=Object.entries(CAPACIDADE_VAGAS).map(([produto,total])=>{
+      const ocupadas=contratosAtivos.filter(c=>c.produto===produto);
+      const livres=total-ocupadas.length;
+      return `<div class="card" style="margin-bottom:16px">
+        <div class="card-header"><h3><i class="ti ti-briefcase" style="margin-right:6px"></i>Capacidade — ${produto}</h3></div>
+        <div class="card-body">
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:28px;font-weight:700;color:${livres>0?'var(--green)':'var(--red)'}">${ocupadas.length}/${total}</div>
+            <div style="font-size:12px;color:var(--text-3)">vagas ocupadas${livres>0?` — <strong style="color:var(--green)">${livres} livre${livres>1?'s':''}</strong>`:' — todas ocupadas, próxima venda entra na fila de execução'}</div>
+          </div>
+          ${ocupadas.length?`<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">${ocupadas.map(c=>`
+            <div style="font-size:12px;color:var(--text-2);display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px">
+              <span>${c.clientes?c.clientes.nome:'—'}</span>
+              <span style="color:var(--text-3)">${fmtDate(c.data_inicio)} → ${c.data_fim?fmtDate(c.data_fim):'aberto'}</span>
+            </div>`).join('')}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML=capacidadeHtml+`
     <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Front</th><th>Mês de referência</th><th>Meta de receita</th><th style="width:90px"></th></tr></thead>
+    <thead><tr><th>Front</th><th>Mês de referência</th><th>Meta real</th><th>Meta interna (buffer)</th><th style="width:90px"></th></tr></thead>
     <tbody>${rows.length?rows.map(r=>`<tr>
       <td>${frontTag(r.front)}</td>
       <td style="font-weight:500">${fmtMonth(r.mes_referencia)}</td>
       <td class="td-mono"><strong style="color:var(--gold-dark)">${fmt(r.valor_meta)}</strong></td>
+      <td class="td-mono" style="color:var(--text-2)">${r.meta_interna?fmt(r.meta_interna):'—'}</td>
       <td><div class="td-actions">
         <button class="btn btn-outline btn-xs" onclick="openMetaModal(${JSON.stringify(r).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
         <button class="btn btn-danger btn-xs" onclick="deleteMeta('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
-    </tr>`).join(''):`<tr><td colspan="4"><div class="empty"><i class="ti ti-target"></i><div class="empty-title">Nenhuma meta definida</div><p>Defina metas mensais por front para ativar o indicador de progresso no dashboard.</p></div></td></tr>`}</tbody>
+    </tr>`).join(''):`<tr><td colspan="5"><div class="empty"><i class="ti ti-target"></i><div class="empty-title">Nenhuma meta definida</div><p>Defina metas mensais por front para ativar o indicador de progresso no dashboard.</p></div></td></tr>`}</tbody>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1510,7 +1818,12 @@ function openMetaModal(m){
     <div class="modal-body"><div class="form-grid">
       <div><label>Front *</label><select id="mt-front"><option value="Nacasa Comunicação" ${!m||m.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${m&&m.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
       <div><label>Mês de referência *</label><input id="mt-mes" type="month" value="${m?m.mes_referencia.slice(0,7):''}"></div>
-      <div><label>Valor da meta (R$) *</label><input id="mt-val" type="number" step="0.01" value="${m?m.valor_meta:''}" placeholder="0,00"></div>
+      <div><label>Meta real (R$) *</label><input id="mt-val" type="number" step="0.01" value="${m?m.valor_meta:''}" placeholder="0,00"></div>
+      <div>
+        <label>Meta interna / buffer (R$)</label>
+        <input id="mt-val-interna" type="number" step="0.01" value="${m?m.meta_interna||'':''}" placeholder="0,00">
+        <button type="button" class="btn btn-out2 btn-sm" style="margin-top:6px" onclick="const v=parseFloat(document.getElementById('mt-val').value)||0;document.getElementById('mt-val-interna').value=(v*1.125).toFixed(2)"><i class="ti ti-wand"></i> Preencher +12,5% automático</button>
+      </div>
     </div></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModalForce()">Cancelar</button>
@@ -1520,7 +1833,7 @@ function openMetaModal(m){
 }
 async function saveMeta(id){
   const mes=document.getElementById('mt-mes').value;
-  const data={front:document.getElementById('mt-front').value,mes_referencia:mes?mes+'-01':null,valor_meta:parseFloat(document.getElementById('mt-val').value)||0};
+  const data={front:document.getElementById('mt-front').value,mes_referencia:mes?mes+'-01':null,valor_meta:parseFloat(document.getElementById('mt-val').value)||0,meta_interna:parseFloat(document.getElementById('mt-val-interna').value)||null};
   if(!data.mes_referencia||!data.valor_meta){notify('Mês e valor são obrigatórios','error');return;}
   try{id?await dbUpdate('metas_mensais',id,data):await dbInsert('metas_mensais',data);closeModalForce();notify(id?'Meta atualizada':'Meta definida','success');loadMetas();}
   catch(e){notify('Erro: '+e.message,'error');}
@@ -1533,6 +1846,15 @@ async function deleteMeta(id){
 
 // ── FUNIL COMERCIAL ──
 const ETAPAS = ['Lead','Contato feito','Diagnóstico agendado','Proposta enviada','Negociação','Fechado','Perdido'];
+const PRODUTOS_PADRAO = [
+  'Mentoria IEL (R$3.900)',
+  'Mentoria em grupo (R$9.000)',
+  'Consultoria empresarial R$15.000',
+  'Consultoria empresarial R$45.000',
+  'Social Media',
+  'Gerenciamento de Marketing'
+];
+const CAPACIDADE_VAGAS = {'Consultoria empresarial R$45.000': 2};
 const TEMP_CONFIG = {
   'Quente':  {cls:'badge-red',   icon:'ti-flame',        cor:'var(--red)'},
   'Morno':   {cls:'badge-amber', icon:'ti-flame',        cor:'var(--amber)'},
@@ -1659,6 +1981,19 @@ async function loadFunil(){
     <div class="card"><div class="tw"><table id="funil-table">
       <thead><tr><th>Lead</th><th>Front</th><th>Produto</th><th>Etapa</th><th>Temperatura</th><th>Valor potencial</th><th>Origem</th><th>Entrada</th><th style="width:80px"></th></tr></thead>
       <tbody>${rows||`<tr><td colspan="9"><div class="empty"><i class="ti ti-filter"></i><div class="et">Nenhum lead cadastrado</div></div></td></tr>`}</tbody>
+        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
+      <tr>
+        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
+          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
+        </td>
+        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
+        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
+        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
+        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
+        <td colspan="2" style="padding:10px 14px"></td>
+      </tr>
+    </tfoot>
     </table></div></div>`;
   // Injetar gráficos antes da tabela
   const tableEl = el.querySelector('.card');
@@ -1728,7 +2063,14 @@ async function openLeadModal(l){
           <option value="Nacasa Comunicação" ${!l||l.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option>
           <option value="Nacasa Educação" ${l&&l.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option>
         </select></div>
-        <div><label>Produto de interesse</label><input id="ld-produto" value="${l?l.produto||'':''}" placeholder="Ex: ECOAR, Gestão de conteúdo..."></div>
+        <div><label>Produto de interesse</label>
+          <input id="ld-produto" list="produtos-list" value="${l?l.produto||'':''}" placeholder="Selecione ou digite...">
+          <datalist id="produtos-list">${PRODUTOS_PADRAO.map(p=>`<option value="${p}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="fr">
+        <div><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ld-escada" style="width:auto" ${l&&l.veio_da_escada?'checked':''}> Veio de upgrade da escada de valor</label></div>
+        <div><label>Produto de origem (se upgrade)</label><input id="ld-produto-origem" list="produtos-list" value="${l?l.produto_origem||'':''}" placeholder="Ex: Mentoria IEL"></div>
       </div>
       <div class="fr">
         <div><label>Etapa *</label><select id="ld-etapa">
@@ -1762,6 +2104,8 @@ async function saveLead(id){
     origem:document.getElementById('ld-origem').value.trim(),
     front:document.getElementById('ld-front').value,
     produto:document.getElementById('ld-produto').value.trim(),
+    veio_da_escada:document.getElementById('ld-escada').checked,
+    produto_origem:document.getElementById('ld-produto-origem').value.trim()||null,
     etapa:document.getElementById('ld-etapa').value,
     temperatura:document.getElementById('ld-temp').value,
     valor_potencial:parseFloat(document.getElementById('ld-val').value)||null,

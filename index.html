@@ -1429,7 +1429,6 @@ async function marcarPago(medicaoId, valorMedido, valorPrevisto, contratoId){
       data_pagamento:new Date().toISOString().slice(0,10),
       cliente_id:ct.cliente_id||null,
       contrato_id:contratoId,
-      lancado_por:SESSION?.user?.id||null,
     });
 
     const lancamentoId=lancs&&lancs[0]?lancs[0].id:null;
@@ -1739,7 +1738,6 @@ async function saveLancamento(id){
     data_pagamento:document.getElementById('lc-pgto').value||null,
     cliente_id:document.getElementById('lc-cli').value||null,
     contrato_id:document.getElementById('lc-ct').value||null,
-    lancado_por:SESSION.user.id,
   };
   if(!base.descricao||!valorTotal||!base.data_vencimento){notify('Descrição, valor e vencimento são obrigatórios','error');return;}
   try{

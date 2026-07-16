@@ -1085,7 +1085,7 @@ async function loadContratos(){
       <td>${statusBadge(r.status)}</td>
       <td><div class="td-actions">
           <button class="btn btn-out2 btn-xs" onclick="navigate('medicoes');window._ctFilter='${r.id}'"><i class="ti ti-ruler-measure"></i> Medições</button>
-          <button class="btn btn-outline btn-xs" onclick="openContratoModal(${JSON.stringify(r).replace(/&quot;/g,'\"')})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-outline btn-xs" onclick="editContrato('${r.id}')"><i class="ti ti-edit"></i></button>
           <button class="btn btn-danger btn-xs" onclick="deleteContrato('${r.id}')"><i class="ti ti-trash"></i></button>
         </div></td>
     </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><i class="ti ti-file-description"></i><div class="empty-title">Nenhum contrato cadastrado</div><p>Clique em "Novo contrato" para começar.</p></div></td></tr>`}</tbody>
@@ -1106,6 +1106,13 @@ async function loadContratos(){
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 const tipoLabel=t=>({mensal_fixo:'Mensal fixo',por_entrega:'Por entrega',por_projeto:'Por projeto'}[t]||t||'—');
+
+async function editContrato(id){
+  try{
+    const rows=await dbGet('contratos',`select=*,clientes(nome)&id=eq.${id}`);
+    if(rows&&rows[0]) openContratoModal(rows[0]);
+  }catch(e){notify('Erro ao carregar contrato: '+e.message,'error');}
+}
 
 async function openContratoModal(c){
   const clientes=await dbGet('clientes','select=id,nome&order=nome.asc');

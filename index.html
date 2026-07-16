@@ -573,7 +573,12 @@ async function login(){
     SESSION=d;await initApp();
   }catch(e){document.getElementById('login-err').textContent=e.message;}
 }
-async function logout(){SESSION=null;document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';}
+async function logout(){
+  SESSION=null;
+  localStorage.removeItem('nacasa_sgi_session');
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').style.display='flex';
+}
 function toggleSidebar(){
   document.querySelector('.sb').classList.toggle('open');
   document.getElementById('sb-overlay').classList.toggle('on');
@@ -582,6 +587,26 @@ function closeSidebar(){
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('sb-overlay').classList.remove('on');
 }
+// Restaurar sessão salva ao carregar a página
+(async function restoreSession(){
+  try{
+    const saved = localStorage.getItem('nacasa_sgi_session');
+    if(!saved) return;
+    const parsed = JSON.parse(saved);
+    if(!parsed || !parsed.access_token || !parsed.user) return;
+    // Verificar se o token ainda é válido
+    const exp = parsed.expires_at || (parsed.expires_in ? Math.floor(Date.now()/1000)+parsed.expires_in : 0);
+    if(exp && Math.floor(Date.now()/1000) > exp){
+      localStorage.removeItem('nacasa_sgi_session');
+      return;
+    }
+    SESSION = parsed;
+    await initApp();
+  }catch(e){
+    localStorage.removeItem('nacasa_sgi_session');
+  }
+})();
+
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')login();});
 
 async function initApp(){
@@ -2699,7 +2724,9 @@ async function login(){
     const r=await fetch(SUPA_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},body:JSON.stringify({email,password:senha})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
-    SESSION=d;await initApp();
+    SESSION=d;
+    localStorage.setItem('nacasa_sgi_session', JSON.stringify(d));
+    await initApp();
   }catch(e){document.getElementById('lerr').textContent=e.message;}
 }
 
@@ -2751,6 +2778,26 @@ function closeSidebar(){
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('sb-overlay').classList.remove('on');
 }
+// Restaurar sessão salva ao carregar a página
+(async function restoreSession(){
+  try{
+    const saved = localStorage.getItem('nacasa_sgi_session');
+    if(!saved) return;
+    const parsed = JSON.parse(saved);
+    if(!parsed || !parsed.access_token || !parsed.user) return;
+    // Verificar se o token ainda é válido
+    const exp = parsed.expires_at || (parsed.expires_in ? Math.floor(Date.now()/1000)+parsed.expires_in : 0);
+    if(exp && Math.floor(Date.now()/1000) > exp){
+      localStorage.removeItem('nacasa_sgi_session');
+      return;
+    }
+    SESSION = parsed;
+    await initApp();
+  }catch(e){
+    localStorage.removeItem('nacasa_sgi_session');
+  }
+})();
+
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')login();
 });

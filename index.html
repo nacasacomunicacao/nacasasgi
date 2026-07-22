@@ -1974,23 +1974,22 @@ async function loadFinanceiro(){
     const hoje=new Date();
     const hojeStr=hoje.toISOString().slice(0,10);
     const anoFin=parseInt(document.getElementById('fin-ano')?.value||hoje.getFullYear());
-    const fimStr=`${anoFin}-12-31`;
-    const inicioStr=`${anoFin}-01-01`;
 
-    // Buscar TODOS os lançamentos relevantes
-    // Buscar lançamentos do ano selecionado
-    let q=`select=*,clientes(nome)&order=data_vencimento.asc&data_vencimento=gte.${anoFin}-01-01&data_vencimento=lte.${anoFin}-12-31`;
+    // Buscar todos os lançamentos do ano selecionado
+    let qAno=`select=*,clientes(nome)&order=data_vencimento.asc&data_vencimento=gte.${anoFin}-01-01&data_vencimento=lte.${anoFin}-12-31`;
+    if(FRONT) qAno+=`&front=eq.${encodeURIComponent(FRONT)}`;
+
     // Buscar vencidos de qualquer período (sem filtro de data)
     let qVenc=`select=*,clientes(nome)&status=eq.atrasado&order=data_vencimento.asc`;
-    if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
-    let [todos, todosVenc] = await Promise.all([
-      dbGet('lancamentos',q),
-      dbGet('lancamentos', FRONT ? qVenc+`&front=eq.${encodeURIComponent(FRONT)}` : qVenc)
-    ]);
-    if(FRONT) todos=todos.filter(l=>l.front===FRONT);
+    if(FRONT) qVenc+=`&front=eq.${encodeURIComponent(FRONT)}`;
 
-    // Atualizar status de vencidos automaticamente
-    const aAtualizar=todos.filter(l=>l.status==='previsto'&&l.data_vencimento&&l.data_vencimento<hojeStr);
+    const [todoAno, todosVenc] = await Promise.all([
+      dbGet('lancamentos', qAno),
+      dbGet('lancamentos', qVenc)
+    ]);
+
+    // Atualizar status previsto->atrasado automaticamente
+    const aAtualizar = todoAno.filter(l=>l.status==='previsto'&&l.data_vencimento<hojeStr);
     if(aAtualizar.length>0){
       await Promise.all(aAtualizar.map(l=>dbUpdate('lancamentos',l.id,{status:'atrasado'})));
       aAtualizar.forEach(l=>{l.status='atrasado';});
@@ -1998,146 +1997,173 @@ async function loadFinanceiro(){
 
     // Separar por tipo e status
     const recVencidos  = todosVenc.filter(l=>l.tipo==='entrada');
-    const recAReceber  = todos.filter(l=>l.tipo==='entrada'&&l.status==='previsto');
-    const recRecebidos = todos.filter(l=>l.tipo==='entrada'&&l.status==='pago');
     const pagVencidos  = todosVenc.filter(l=>l.tipo==='saida');
-    const pagAPagar    = todos.filter(l=>l.tipo==='saida'&&l.status==='previsto');
-    const pagPagos     = todos.filter(l=>l.tipo==='saida'&&l.status==='pago');
+    const recAReceber  = todoAno.filter(l=>l.tipo==='entrada'&&l.status==='previsto');
+    const pagAPagar    = todoAno.filter(l=>l.tipo==='saida'&&l.status==='previsto');
+    const recRecebidos = todoAno.filter(l=>l.tipo==='entrada'&&l.status==='pago');
+    const pagPagos     = todoAno.filter(l=>l.tipo==='saida'&&l.status==='pago');
+
+    // Próximos 30 dias
+    const d30=new Date(hoje); d30.setDate(d30.getDate()+30);
+    const d30Str=d30.toISOString().slice(0,10);
+    const recProx30=recAReceber.filter(l=>l.data_vencimento&&l.data_vencimento<=d30Str);
+
+    // Saldo projetado do mês atual
+    const mesStr=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+    const entMesAt=todoAno.filter(l=>l.tipo==='entrada'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr));
+    const saiMesAt=todoAno.filter(l=>l.tipo==='saida'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr));
+    const saldoMes=entMesAt.reduce((s,l)=>s+Number(l.valor||0),0)-saiMesAt.reduce((s,l)=>s+Number(l.valor||0),0);
 
     const soma=arr=>arr.reduce((s,l)=>s+Number(l.valor||0),0);
 
-    // Atualizar badge na sidebar
+    // Atualizar badge sidebar
     const totalAtraso=recVencidos.length+pagVencidos.length;
     const badge=document.getElementById('badge-atraso');
     if(badge){badge.textContent=totalAtraso;badge.style.display=totalAtraso>0?'inline':'none';}
 
-    // Renderizar lista de lançamentos
-    const renderLista=(items,tipo)=>{
-      if(!items.length) return `<div class="empty" style="padding:20px"><i class="ti ti-check" style="font-size:24px;color:var(--green)"></i><p>Nenhum item</p></div>`;
-      return items.slice(0,15).map(l=>{
-        const dias=l.data_vencimento?Math.round((new Date(l.data_vencimento)-hoje)/(1000*60*60*24)):null;
-        const diasStr=dias===null?'':dias<0?`${Math.abs(dias)}d atraso`:dias===0?'Hoje':dias===1?'Amanhã':`em ${dias}d`;
-        const corDias=dias<0?'var(--red)':dias<=3?'var(--amber)':'var(--text-3)';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)">
-          <div>
-            <div style="font-weight:600;font-size:13px;color:var(--navy)">${l.clientes?l.clientes.nome:l.descricao}</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:1px">${l.clientes?l.descricao:''} ${l.pago_com_atraso?'<span style="color:var(--amber)">· pago com atraso</span>':''}</div>
+    // ── GRÁFICO E TABELA MENSAIS ──
+    const mesesNomes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const dadosMeses=mesesNomes.map((_,m)=>{
+      const ms=`${anoFin}-${String(m+1).padStart(2,'0')}`;
+      const entPrev=todoAno.filter(l=>l.tipo==='entrada'&&l.status!=='pago'&&l.data_vencimento?.startsWith(ms)).reduce((s,l)=>s+Number(l.valor||0),0);
+      const entReal=todoAno.filter(l=>l.tipo==='entrada'&&l.status==='pago'&&(l.data_pagamento?.startsWith(ms)||l.data_vencimento?.startsWith(ms))).reduce((s,l)=>s+Number(l.valor||0),0);
+      const saiPrev=todoAno.filter(l=>l.tipo==='saida'&&l.status!=='pago'&&l.data_vencimento?.startsWith(ms)).reduce((s,l)=>s+Number(l.valor||0),0);
+      const saiReal=todoAno.filter(l=>l.tipo==='saida'&&l.status==='pago'&&(l.data_pagamento?.startsWith(ms)||l.data_vencimento?.startsWith(ms))).reduce((s,l)=>s+Number(l.valor||0),0);
+      return {ms,entPrev,entReal,saiPrev,saiReal,saldoMes:entReal-saiReal};
+    });
+    let saldoAcum=0;
+    const saldoAcumArr=dadosMeses.map(d=>{saldoAcum+=d.saldoMes;return saldoAcum;});
+
+    // ── LISTA DE VENCIDOS ──
+    const renderVencidos=(items,tipo)=>{
+      if(!items.length) return `<div style="padding:24px;text-align:center;color:var(--text-3)"><i class="ti ti-circle-check" style="font-size:28px;color:var(--green)"></i><div style="margin-top:8px;font-size:13px">Nenhum item em atraso</div></div>`;
+      const ordenados=[...items].sort((a,b)=>{
+        const da=a.data_vencimento?new Date(a.data_vencimento):new Date();
+        const db2=b.data_vencimento?new Date(b.data_vencimento):new Date();
+        return da-db2; // mais antigo primeiro
+      });
+      return ordenados.map(l=>{
+        const dias=l.data_vencimento?Math.round((hoje-new Date(l.data_vencimento+'T12:00:00'))/(1000*60*60*24)):0;
+        const corDias=dias>30?'var(--red)':dias>7?'var(--amber)':'var(--text-2)';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:12px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.clientes?l.clientes.nome:l.descricao}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.descricao}</div>
           </div>
-          <div style="text-align:right">
-            <div style="font-weight:700;font-size:13px">${fmt(l.valor)}</div>
-            <div style="font-size:11px;color:${corDias};margin-top:1px">${tipo==='pago'?fmtDate(l.data_pagamento):diasStr}</div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-weight:700;font-size:13px;color:var(--navy)">${fmt(l.valor)}</div>
+            <div style="font-size:11px;font-weight:600;color:${corDias};margin-top:1px">${dias}d em atraso</div>
           </div>
         </div>`;
-      }).join('')+(items.length>15?`<div style="padding:10px 16px;font-size:12px;color:var(--text-3);text-align:center">+${items.length-15} mais</div>`:'');
+      }).join('');
     };
 
-    // Gráfico de fluxo de caixa MENSAL
-    const anoGraf=parseInt(document.getElementById('fin-ano')?.value||new Date().getFullYear());
-    const mesesGraf=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    const recGraf=[],pagGraf=[],saldoGraf=[];
-    let saldoAcum=0;
-    for(let m=0;m<12;m++){
-      const mesStr=`${anoGraf}-${String(m+1).padStart(2,'0')}`;
-      const entMes=todos.filter(l=>l.tipo==='entrada'&&(
-        (l.status==='pago'&&l.data_pagamento&&l.data_pagamento.startsWith(mesStr))||
-        (l.status!=='pago'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr))
-      )).reduce((s,l)=>s+Number(l.valor||0),0);
-      const saiMes=todos.filter(l=>l.tipo==='saida'&&(
-        (l.status==='pago'&&l.data_pagamento&&l.data_pagamento.startsWith(mesStr))||
-        (l.status!=='pago'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr))
-      )).reduce((s,l)=>s+Number(l.valor||0),0);
-      recGraf.push(entMes/1000);
-      pagGraf.push(-(saiMes/1000)); // negativo = saída
-      saldoAcum+=entMes-saiMes;
-      saldoGraf.push(saldoAcum/1000);
-    }
-
     el.innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <!-- CONTAS A RECEBER -->
-      <div class="card">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)">
-          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--red-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠ Vencidos</div>
-            <div style="font-size:18px;font-weight:700;color:var(--red)">${fmt(soma(recVencidos))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${recVencidos.length} lançamento(s)</div>
-          </div>
-          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--amber-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;margin-bottom:4px">⏱ A Receber</div>
-            <div style="font-size:18px;font-weight:700;color:var(--amber)">${fmt(soma(recAReceber))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${recAReceber.length} lançamento(s)</div>
-          </div>
-          <div style="padding:14px 16px;background:var(--green-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✓ Recebidos</div>
-            <div style="font-size:18px;font-weight:700;color:var(--green)">${fmt(soma(recRecebidos))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${recRecebidos.length} lançamento(s)</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
-          <button class="btn btn-xs btn-pri fin-tab-rec active-fin" onclick="switchFinTab(this,'rec','vencidos')" data-target="rec-vencidos">Vencidos</button>
-          <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','areceber')" data-target="rec-areceber">A receber</button>
-          <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','recebidos')" data-target="rec-recebidos">Recebidos</button>
-        </div>
-        <div id="rec-vencidos" class="fin-panel-rec" style="max-height:280px;overflow-y:auto">${renderLista(recVencidos,'vencido')}</div>
-        <div id="rec-areceber" class="fin-panel-rec" style="max-height:280px;overflow-y:auto;display:none">${renderLista(recAReceber,'areceber')}</div>
-        <div id="rec-recebidos" class="fin-panel-rec" style="max-height:280px;overflow-y:auto;display:none">${renderLista(recRecebidos,'pago')}</div>
+    <!-- KPIs -->
+    <div class="kpi-grid" style="margin-bottom:16px">
+      <div class="kpi-card danger">
+        <div class="kpi-icon r"><i class="ti ti-alert-circle"></i></div>
+        <div class="kpi-label">Vencido a receber</div>
+        <div class="kpi-value" style="color:var(--red)">${fmt(soma(recVencidos))}</div>
+        <div class="ksub">${recVencidos.length} lançamento(s)</div>
       </div>
-
-      <!-- CONTAS A PAGAR -->
-      <div class="card">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)">
-          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--red-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠ Vencidos</div>
-            <div style="font-size:18px;font-weight:700;color:var(--red)">${fmt(soma(pagVencidos))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${pagVencidos.length} lançamento(s)</div>
-          </div>
-          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--amber-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;margin-bottom:4px">⏱ A Pagar</div>
-            <div style="font-size:18px;font-weight:700;color:var(--amber)">${fmt(soma(pagAPagar))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${pagAPagar.length} lançamento(s)</div>
-          </div>
-          <div style="padding:14px 16px;background:var(--green-bg)">
-            <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✓ Pagos</div>
-            <div style="font-size:18px;font-weight:700;color:var(--green)">${fmt(soma(pagPagos))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${pagPagos.length} lançamento(s)</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
-          <button class="btn btn-xs btn-pri fin-tab-pag active-fin" onclick="switchFinTab(this,'pag','vencidos')" data-target="pag-vencidos">Vencidos</button>
-          <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','apagar')" data-target="pag-apagar">A pagar</button>
-          <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','pagos')" data-target="pag-pagos">Pagos</button>
-        </div>
-        <div id="pag-vencidos" class="fin-panel-pag" style="max-height:280px;overflow-y:auto">${renderLista(pagVencidos,'vencido')}</div>
-        <div id="pag-apagar" class="fin-panel-pag" style="max-height:280px;overflow-y:auto;display:none">${renderLista(pagAPagar,'apagar')}</div>
-        <div id="pag-pagos" class="fin-panel-pag" style="max-height:280px;overflow-y:auto;display:none">${renderLista(pagPagos,'pago')}</div>
+      <div class="kpi-card danger">
+        <div class="kpi-icon r"><i class="ti ti-alert-circle"></i></div>
+        <div class="kpi-label">Vencido a pagar</div>
+        <div class="kpi-value" style="color:var(--red)">${fmt(soma(pagVencidos))}</div>
+        <div class="ksub">${pagVencidos.length} lançamento(s)</div>
+      </div>
+      <div class="kpi-card gold">
+        <div class="kpi-icon a"><i class="ti ti-clock"></i></div>
+        <div class="kpi-label">A receber — 30 dias</div>
+        <div class="kpi-value">${fmt(soma(recProx30))}</div>
+        <div class="ksub">${recProx30.length} lançamento(s)</div>
+      </div>
+      <div class="kpi-card ${saldoMes>=0?'success':'danger'}">
+        <div class="kpi-icon ${saldoMes>=0?'g':'r'}"><i class="ti ti-trending-${saldoMes>=0?'up':'down'}"></i></div>
+        <div class="kpi-label">Saldo projetado do mês</div>
+        <div class="kpi-value" style="color:${saldoMes>=0?'var(--green)':'var(--red)'}">${fmt(Math.abs(saldoMes))}</div>
+        <div class="ksub">${saldoMes>=0?'Positivo':'Negativo'}</div>
       </div>
     </div>
 
-    <!-- FLUXO DE CAIXA -->
+    <!-- VENCIDOS LADO A LADO -->
+    <div class="cgrid" style="margin-bottom:16px">
+      <div class="card" style="border-top:3px solid var(--red)">
+        <div class="card-header">
+          <div><h3 style="color:var(--red)"><i class="ti ti-arrow-down-circle" style="margin-right:6px"></i>Vencidos a receber</h3>
+            <div class="card-sub">Ordenado por mais antigo · vá em Lançamentos/Medições para registrar</div>
+          </div>
+          <span class="badge badge-red">${fmt(soma(recVencidos))}</span>
+        </div>
+        <div style="max-height:320px;overflow-y:auto">${renderVencidos(recVencidos,'rec')}</div>
+      </div>
+      <div class="card" style="border-top:3px solid var(--red)">
+        <div class="card-header">
+          <div><h3 style="color:var(--red)"><i class="ti ti-arrow-up-circle" style="margin-right:6px"></i>Vencidos a pagar</h3>
+            <div class="card-sub">Ordenado por mais antigo · vá em Lançamentos para regularizar</div>
+          </div>
+          <span class="badge badge-red">${fmt(soma(pagVencidos))}</span>
+        </div>
+        <div style="max-height:320px;overflow-y:auto">${renderVencidos(pagVencidos,'pag')}</div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO + TABELA -->
     <div class="card">
       <div class="card-header">
-        <div><h3>Fluxo de Caixa</h3><div class="card-sub">${anoGraf} — visão mensal</div></div>
+        <div><h3>Fluxo de Caixa — ${anoFin}</h3><div class="card-sub">Recebimentos e pagamentos mensais · linha de saldo acumulado</div></div>
+        <select id="fin-ano" onchange="loadFinanceiro()" style="height:28px;font-size:12px;width:80px">
+          <option value="2025" ${anoFin===2025?'selected':''}>2025</option>
+          <option value="2026" ${anoFin===2026?'selected':''}>2026</option>
+          <option value="2027" ${anoFin===2027?'selected':''}>2027</option>
+        </select>
       </div>
       <div class="card-body"><div style="position:relative;height:260px"><canvas id="chart-fluxo"></canvas></div></div>
+      <div class="tw" style="margin-top:8px">
+        <table style="font-size:11px">
+          <thead><tr>
+            <th>Mês</th>
+            <th style="color:var(--green)">Rec. previsto</th>
+            <th style="color:var(--green)">Rec. realizado</th>
+            <th style="color:var(--red)">Pag. previsto</th>
+            <th style="color:var(--red)">Pag. realizado</th>
+            <th>Saldo do mês</th>
+            <th>Saldo acumulado</th>
+          </tr></thead>
+          <tbody>
+            ${dadosMeses.map((d,i)=>`<tr style="${d.ms===mesStr?'background:var(--blue-light);font-weight:600':''}">
+              <td>${mesesNomes[i]}</td>
+              <td class="td-mono" style="color:var(--green)">${d.entPrev>0?fmt(d.entPrev):'—'}</td>
+              <td class="td-mono" style="color:var(--green)">${d.entReal>0?fmt(d.entReal):'—'}</td>
+              <td class="td-mono" style="color:var(--red)">${d.saiPrev>0?fmt(d.saiPrev):'—'}</td>
+              <td class="td-mono" style="color:var(--red)">${d.saiReal>0?fmt(d.saiReal):'—'}</td>
+              <td class="td-mono" style="color:${d.saldoMes>=0?'var(--green)':'var(--red)'}">${d.saldoMes!==0?fmt(d.saldoMes):'—'}</td>
+              <td class="td-mono" style="color:${saldoAcumArr[i]>=0?'var(--blue)':'var(--red)'}"><strong>${fmt(saldoAcumArr[i])}</strong></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>`;
 
-    // Inicializar gráfico
+    // Inicializar gráfico misto (barras + linha)
     if(window._chartFluxo){window._chartFluxo.destroy();}
     window._chartFluxo=new Chart(document.getElementById('chart-fluxo'),{
-      type:'line',
+      type:'bar',
       data:{
-        labels:mesesGraf,
+        labels:mesesNomes,
         datasets:[
-          {label:'Recebimentos (R$k)',data:recGraf,borderColor:'var(--green)',backgroundColor:'rgba(22,163,74,.08)',fill:true,pointRadius:2,tension:.3,borderWidth:2},
-          {label:'Pagamentos (R$k)',data:pagGraf,borderColor:'var(--red)',backgroundColor:'rgba(220,38,38,.08)',fill:false,pointRadius:2,tension:.3,borderWidth:2,borderDash:[4,3]},
-          {label:'Saldo acumulado (R$k)',data:saldoGraf,borderColor:'var(--blue)',pointRadius:3,tension:.3,borderWidth:2.5,borderDash:[]}
+          {label:'Recebimentos (R$k)',data:dadosMeses.map(d=>(d.entPrev+d.entReal)/1000),backgroundColor:'rgba(22,163,74,.6)',borderRadius:4,order:2},
+          {label:'Pagamentos (R$k)',data:dadosMeses.map(d=>-((d.saiPrev+d.saiReal)/1000)),backgroundColor:'rgba(220,38,38,.5)',borderRadius:4,order:2},
+          {label:'Saldo acumulado (R$k)',data:saldoAcumArr.map(v=>v/1000),type:'line',borderColor:'#2B3FD4',pointBackgroundColor:'#2B3FD4',pointRadius:4,tension:.3,borderWidth:2.5,fill:false,order:1}
         ]
       },
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12}}},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:14}}},
         scales:{
           y:{ticks:{callback:v=>v>=0?'R$ '+v+'k':'- R$ '+Math.abs(v)+'k',font:{size:10}},grid:{color:'#f0f0f0'},border:{display:false}},
-          x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{display:false},border:{display:false}}
+          x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}}
         },
         interaction:{mode:'index',intersect:false}
       }
@@ -2145,6 +2171,7 @@ async function loadFinanceiro(){
 
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
+
 
 function switchFinTab(btn, grupo, tab){
   document.querySelectorAll(`.fin-tab-${grupo}`).forEach(b=>{

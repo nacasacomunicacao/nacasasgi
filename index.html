@@ -1195,12 +1195,54 @@ async function saveContrato(id){
   try{
     let contratoId = id;
     if(id){
-      await dbUpdate('contratos',id,data);
-      notify('Contrato atualizado','success');
+      // Buscar contrato anterior para comparar mudanças
+      const anterior = await dbGet('contratos', `select=valor_total,tipo_cobranca,data_inicio,data_fim&id=eq.${id}`);
+      const ant = anterior[0]||{};
+      await dbUpdate('contratos', id, data);
+
+      // Sincronizar medições PENDENTES se valor ou período mudou
+      const valorMudou = Number(ant.valor_total) !== Number(data.valor_total);
+      const tipoMudou  = ant.tipo_cobranca !== data.tipo_cobranca;
+      const periodoMudou = ant.data_inicio !== data.data_inicio || ant.data_fim !== data.data_fim;
+
+      if(valorMudou || tipoMudou || periodoMudou){
+        // Calcular novo valor previsto por mês
+        let novoValorPrevisto = Number(data.valor_total);
+        if(data.tipo_cobranca !== 'mensal_fixo' && data.data_inicio && data.data_fim){
+          const ini = new Date(data.data_inicio+'T12:00:00');
+          const fim = new Date(data.data_fim+'T12:00:00');
+          let nMeses = 0;
+          const d = new Date(ini.getFullYear(), ini.getMonth(), 1);
+          while(d <= fim){ nMeses++; d.setMonth(d.getMonth()+1); }
+          novoValorPrevisto = Math.round((Number(data.valor_total) / Math.max(nMeses,1))*100)/100;
+        }
+
+        // Atualizar apenas medições PENDENTES (não pagas — preserva histórico)
+        const medsPendentes = await dbGet('medicoes',
+          `select=id&contrato_id=eq.${id}&status=eq.pendente&valor_medido=eq.0`);
+        if(medsPendentes.length > 0){
+          await Promise.all(medsPendentes.map(m =>
+            dbUpdate('medicoes', m.id, { valor_previsto: novoValorPrevisto })
+          ));
+        }
+
+        // Se período mudou, gerar meses novos que ainda não existem
+        if(periodoMudou){
+          await gerarMesesFaltantes(id);
+          return; // gerarMesesFaltantes já chama loadContratos internamente
+        }
+
+        const msg = medsPendentes.length > 0
+          ? `Contrato atualizado · ${medsPendentes.length} medição(ões) pendente(s) sincronizada(s)`
+          : 'Contrato atualizado';
+        notify(msg, 'success');
+      } else {
+        notify('Contrato atualizado', 'success');
+      }
     } else {
-      const novo = await dbInsert('contratos',data);
+      const novo = await dbInsert('contratos', data);
       if(novo&&novo[0]) contratoId = novo[0].id;
-      notify('Contrato cadastrado — gerando medições...','info');
+      notify('Contrato cadastrado — gerando medições...', 'info');
     }
     // Gerar medições apenas para novos contratos
     if(!id && contratoId){

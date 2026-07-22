@@ -462,7 +462,13 @@ tbody tr:hover .td-actions{opacity:1}
 
   <div class="main">
     <div id="section-dashboard" class="section on">
-      <div class="topbar"><div><div class="pg-title">Dashboard</div><div class="pg-sub" id="dash-period"></div></div></div>
+      <div class="topbar">
+        <div><div class="pg-title">Dashboard</div><div class="pg-sub" id="dash-period"></div></div>
+        <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:3px">
+          <button id="dash-mode-ano" class="btn btn-sm btn-pri" onclick="setDashMode('ano')" style="font-size:11px">Ano atual</button>
+          <button id="dash-mode-12m" class="btn btn-sm btn-ghost" onclick="setDashMode('12m')" style="font-size:11px">Últimos 12 meses</button>
+        </div>
+      </div>
       <div class="tb-div"></div>
       <div class="content" id="dash-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
     </div>
@@ -526,6 +532,11 @@ tbody tr:hover .td-actions{opacity:1}
         <div style="display:flex;gap:8px;align-items:center">
           <select id="dre-ano" onchange="loadDRE()" style="height:32px;font-size:12px;width:100px">
             <option value="2026">2026</option><option value="2025">2025</option>
+          </select>
+          <select id="dre-comparar" onchange="loadDRE()" style="height:32px;font-size:12px;width:160px">
+            <option value="">Sem comparativo</option>
+            <option value="ant">vs. ano anterior</option>
+            <option value="sem_ant">vs. semestre anterior</option>
           </select>
           <button class="btn btn-out2" onclick="exportDRE()"><i class="ti ti-download"></i>Excel</button>
         </div>
@@ -671,12 +682,26 @@ function closeModal(e){if(!e||e.target.classList.contains('modal-backdrop'))docu
 function closeModalForce(){document.getElementById('modal-container').innerHTML='';}
 
 // ── DASHBOARD ──
+let DASH_MODE = 'ano'; // 'ano' ou '12m'
+
+function setDashMode(mode){
+  DASH_MODE = mode;
+  document.getElementById('dash-mode-ano').className = 'btn btn-sm ' + (mode==='ano'?'btn-pri':'btn-ghost');
+  document.getElementById('dash-mode-12m').className = 'btn btn-sm ' + (mode==='12m'?'btn-pri':'btn-ghost');
+  loadDashboard();
+}
+
 async function loadDashboard(){
   const el=document.getElementById('dash-content');
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     const now=new Date(),anoAtual=now.getFullYear(),mesAtual=monthStr(now);
-    let q=`select=*&data_vencimento=gte.${anoAtual}-01-01&data_vencimento=lte.${anoAtual}-12-31`;
+    // Período: ano atual ou últimos 12 meses
+    const is12m = DASH_MODE==='12m';
+    const periodo12mInicio = new Date(now); periodo12mInicio.setMonth(periodo12mInicio.getMonth()-11); periodo12mInicio.setDate(1);
+    const qInicio = is12m ? periodo12mInicio.toISOString().slice(0,10) : `${anoAtual}-01-01`;
+    const qFim    = is12m ? now.toISOString().slice(0,10) : `${anoAtual}-12-31`;
+    let q=`select=*&data_vencimento=gte.${qInicio}&data_vencimento=lte.${qFim}`;
     if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const lancs=await dbGet('lancamentos',q);
     const mesStr=mesAtual.slice(0,7);
@@ -692,8 +717,15 @@ async function loadDashboard(){
     const cts=await dbGet('contratos',cq);
     const meses=[],prevM=[],realM=[],prevA=[],realA=[];
     let cumP=0,cumR=0;
-    for(let i=0;i<12;i++){
-      const d=new Date(anoAtual,i,1),ms=monthStr(d);
+    // Gerar lista de meses conforme modo
+    const mesesLista=[];
+    if(is12m){
+      for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);mesesLista.push(d);}
+    } else {
+      for(let i=0;i<12;i++){mesesLista.push(new Date(anoAtual,i,1));}
+    }
+    for(const d of mesesLista){
+      const ms=monthStr(d);
       meses.push(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''));
       let mq2=`select=*&mes_referencia=eq.${ms}`;if(FRONT)mq2+=`&front=eq.${encodeURIComponent(FRONT)}`;
       const mm=await dbGet('metas_mensais',mq2);
@@ -702,7 +734,8 @@ async function loadDashboard(){
       prevM.push(p/1000);realM.push(r/1000);
       cumP+=p;cumR+=r;
       prevA.push(cumP/1000);
-      realA.push(i<=now.getMonth()?cumR/1000:null);
+      const isFuture=d>now;
+      realA.push(!isFuture?cumR/1000:null);
     }
     el.innerHTML=`
     <div class="kpi-grid">
@@ -917,6 +950,10 @@ async function loadDashboard(){
       const urgBadge = dias<=14
         ? `<span class="badge badge-red">${dias}d restantes</span>`
         : `<span class="badge badge-amber">${dias}d restantes</span>`;
+      // Calcular valor em risco (mensalidades que se perdem se não renovar)
+      const mesesRestantes = Math.max(0, Math.ceil(dias/30));
+      const valorMensal = ct.tipo_cobranca==='mensal_fixo' ? Number(ct.valor_total) : 0;
+      const valorEmRisco = valorMensal * mesesRestantes;
       return `<tr>
         <td>${urgBadge}</td>
         <td class="tpri">${ct.clientes?ct.clientes.nome:'—'}</td>
@@ -924,6 +961,7 @@ async function loadDashboard(){
         <td>${frontTag(ct.front)}</td>
         <td><strong>${fmt(ct.valor_total)}</strong></td>
         <td style="color:var(--text-2)">${fmtDate(ct.data_fim)}</td>
+        <td>${valorEmRisco>0?`<span style="color:var(--red);font-weight:600;font-size:12px">${fmt(valorEmRisco)} em risco</span>`:'—'}</td>
       </tr>`;
     }).join('');
 
@@ -936,7 +974,7 @@ async function loadDashboard(){
         </div>
       </div>
       <div class="tw"><table>
-        <thead><tr><th>Prazo</th><th>Cliente</th><th>Contrato</th><th>Front</th><th>Valor total</th><th>Vencimento</th></tr></thead>
+        <thead><tr><th>Prazo</th><th>Cliente</th><th>Contrato</th><th>Front</th><th>Valor mensal</th><th>Vencimento</th><th>Valor em risco</th></tr></thead>
         <tbody>${renRows}</tbody>
       </table></div>
     </div>`;
@@ -953,6 +991,13 @@ async function loadClientes(){
   try{
     let q=`select=*&order=nome.asc`;if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const rows=await dbGet('clientes',q);
+
+    // Buscar receita total por cliente (lançamentos pagos)
+    let recQ=`select=cliente_id,valor&tipo=eq.entrada&status=eq.pago`;
+    if(FRONT) recQ+=`&front=eq.${encodeURIComponent(FRONT)}`;
+    const recLancs = await dbGet('lancamentos', recQ);
+    const recPorCliente = {};
+    recLancs.forEach(l=>{ if(l.cliente_id) recPorCliente[l.cliente_id]=(recPorCliente[l.cliente_id]||0)+Number(l.valor); });
 
     // Buscar contratos e lançamentos atrasados para calcular score
     const [ctsAtivos, lancsAtr] = await Promise.all([
@@ -989,7 +1034,7 @@ async function loadClientes(){
       </select>
     </div>
     <div class="card"><div class="table-wrap"><table id="cl-table">
-    <thead><tr><th>Saúde</th><th>Cliente</th><th>Front</th><th>Tipo</th><th>Documento</th><th>E-mail</th><th>Telefone</th><th>Origem</th><th>Status</th><th style="width:100px"></th></tr></thead>
+    <thead><tr><th>Saúde</th><th>Cliente</th><th>Front</th><th>Tipo</th><th>Receita total</th><th>E-mail</th><th>Telefone</th><th>Origem</th><th>Status</th><th style="width:100px"></th></tr></thead>
     <tbody>${rows.length?rows.map(r=>`<tr data-status="${r.ativo}">
       <td>${(s=>
         `<span title="${s.label}" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--${s.cor==='red'?'red':s.cor==='amber'?'amber':s.cor==='green'?'green':'text-3'})">
@@ -999,7 +1044,7 @@ async function loadClientes(){
       <td><div class="td-primary">${r.nome}</div>${r.contato?`<div style="font-size:11px;color:var(--text-3);margin-top:1px">${r.contato}</div>`:''}</td>
       <td>${frontTag(r.front)}</td>
       <td><span class="badge badge-gray">${r.tipo_pessoa||'—'}</span></td>
-      <td style="font-variant-numeric:tabular-nums;color:var(--text-2)">${r.documento||'—'}</td>
+      <td class="td-mono"><strong style="color:\${recPorCliente[r.id]>0?'var(--green)':'var(--text-3)'}">\${recPorCliente[r.id]>0?fmt(recPorCliente[r.id]):'—'}</strong></td>
       <td style="color:var(--text-2)">${r.email||'—'}</td>
       <td style="color:var(--text-2)">${r.telefone||'—'}</td>
       <td style="color:var(--text-2)">${r.origem||'—'}</td>
@@ -1487,6 +1532,20 @@ function renderPainelContrato(ctId){
   const totalMeses    = medsCt.length;
   const corAvanco     = percAvanco>=100?'var(--green)':percAvanco>=60?'var(--blue)':'var(--gold)';
 
+  // Avanço temporal
+  const hoje_p = new Date();
+  let percTempo = 0;
+  if(ctData&&ctData.data_inicio&&ctData.data_fim){
+    const ini_p = new Date(ctData.data_inicio+'T12:00:00');
+    const fim_p = new Date(ctData.data_fim+'T12:00:00');
+    const totalMs = fim_p - ini_p;
+    const decMs   = Math.min(hoje_p - ini_p, totalMs);
+    percTempo = totalMs>0?Math.round((decMs/totalMs)*100):0;
+    percTempo = Math.max(0, Math.min(100, percTempo));
+  }
+  const corTempo   = percTempo>=100?'var(--text-3)':'var(--blue)';
+  const defasagem  = Math.max(0, percTempo - percAvanco);
+
   const resumoEl = document.createElement('div');
   resumoEl.className = 'resumo-contrato';
   resumoEl.innerHTML = `
@@ -1531,16 +1590,37 @@ function renderPainelContrato(ctId){
         </div>
       </div>
       <div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-bottom:5px">
-          <span>Avanço financeiro</span>
-          <span style="font-weight:700;color:${corAvanco}">${percAvanco}%</span>
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-bottom:5px">
+              <span>Avanço financeiro</span>
+              <span style="font-weight:700;color:${corAvanco}">${percAvanco}%</span>
+            </div>
+            <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="width:${percAvanco}%;height:100%;background:${corAvanco};border-radius:4px"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:3px">
+              <span>R$ 0</span><span>${fmt(valorContrato)}</span>
+            </div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-bottom:5px">
+              <span>Avanço temporal</span>
+              <span style="font-weight:700;color:${corTempo}">${percTempo}%</span>
+            </div>
+            <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="width:${percTempo}%;height:100%;background:${corTempo};border-radius:4px"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:3px">
+              <span>${ctData&&ctData.data_inicio?new Date(ctData.data_inicio+'T12:00:00').toLocaleDateString('pt-BR',{month:'short',year:'numeric'}):''}</span>
+              <span>${ctData&&ctData.data_fim?new Date(ctData.data_fim+'T12:00:00').toLocaleDateString('pt-BR',{month:'short',year:'numeric'}):''}</span>
+            </div>
+          </div>
         </div>
-        <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
-          <div style="width:${percAvanco}%;height:100%;background:${corAvanco};border-radius:5px"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:4px">
-          <span>R$ 0</span><span>${fmt(valorContrato)}</span>
-        </div>
+        ${defasagem>15?`<div style="margin-top:10px;padding:8px 12px;background:var(--amber-bg);border-left:3px solid var(--amber);border-radius:4px;font-size:12px;color:var(--amber)">
+          <i class="ti ti-alert-triangle" style="margin-right:6px"></i>
+          <strong>Atenção:</strong> avanço financeiro (${percAvanco}%) está ${defasagem}pp abaixo do avanço temporal (${percTempo}%). Medições pendentes podem impactar o fluxo de caixa.
+        </div>`:''}
       </div>
     </div>
   </div>`;
@@ -2156,7 +2236,40 @@ async function loadFunil(){
       </tr>`;
     }).join('');
 
-    el.innerHTML=`
+    // Calcular tempo médio de fechamento por produto
+    const leadsFechados = leads.filter(l=>l.etapa==='Fechado'&&l.data_entrada&&l.data_fechamento);
+    const tmPorProd = {};
+    leadsFechados.forEach(l=>{
+      const prod = l.produto||'Sem produto';
+      const dias = Math.round((new Date(l.data_fechamento)-new Date(l.data_entrada))/(1000*60*60*24));
+      if(!tmPorProd[prod]) tmPorProd[prod]={total:0,count:0};
+      tmPorProd[prod].total+=dias;
+      tmPorProd[prod].count++;
+    });
+    const tmMedioGeral = leadsFechados.length>0?Math.round(leadsFechados.reduce((s,l)=>s+Math.round((new Date(l.data_fechamento)-new Date(l.data_entrada))/(1000*60*60*24)),0)/fechados.length):null;
+
+    const tmHtml = Object.entries(tmPorProd).length>0?`
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div><h3><i class="ti ti-clock" style="margin-right:6px;color:var(--blue)"></i>Tempo médio de fechamento</h3>
+          <div class="card-sub">Por produto — baseado em ${leadsFechados.length} lead(s) fechado(s)</div>
+        </div>
+        <span class="badge badge-navy">Média geral: ${tmMedioGeral} dias</span>
+      </div>
+      <div style="padding:14px 18px;display:flex;gap:12px;flex-wrap:wrap">
+        ${Object.entries(tmPorProd).map(([prod,v])=>{
+          const media=Math.round(v.total/v.count);
+          const cor=media<=7?'var(--green)':media<=30?'var(--gold)':'var(--red)';
+          return `<div style="background:var(--surface-2);border-radius:var(--rlg);padding:12px 16px;border:1px solid var(--border);min-width:160px">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">${prod}</div>
+            <div style="font-size:20px;font-weight:700;color:${cor}">${media} dias</div>
+            <div style="font-size:11px;color:var(--text-3)">${v.count} fechamento(s)</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:'';
+
+    el.innerHTML= tmHtml + `
     <div class="kpi-grid" style="margin-bottom:16px">
       <div class="kpi-card navy"><div class="kpi-icon b"><i class="ti ti-users"></i></div><div class="kpi-label">Leads ativos</div><div class="kpi-value">${ativos.length}</div><div class="ksub">${quentes.length} quente${quentes.length!==1?'s':''}</div></div>
       <div class="kpi-card gold"><div class="kpi-icon a"><i class="ti ti-coin"></i></div><div class="kpi-label">Valor potencial</div><div class="kpi-value">${fmt(vlrPotencial)}</div><div class="ksub">Em negociação ativa</div></div>
@@ -2568,10 +2681,32 @@ async function loadDRE(){
   el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
     const ano=document.getElementById('dre-ano')?.value||new Date().getFullYear();
+    const comparar=document.getElementById('dre-comparar')?.value||'';
+    const anoAnt = String(Number(ano)-1);
     let qe=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
     let qs=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
     if(FRONT){qe+=`&front=eq.${encodeURIComponent(FRONT)}`;qs+=`&front=eq.${encodeURIComponent(FRONT)}`;}
     const [entradas,saidas]=await Promise.all([dbGet('lancamentos',qe),dbGet('lancamentos',qs)]);
+
+    // Lançamentos do período anterior (para comparativo)
+    let entAnt=[], saiAnt=[];
+    if(comparar){
+      let qeA,qsA;
+      if(comparar==='ant'){
+        qeA=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
+        qsA=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
+      } else {
+        // semestre anterior ao semestre atual
+        const mesAtualDRE=new Date().getMonth();
+        const semAtual=mesAtualDRE<6?0:1;
+        const semAntIni=semAtual===0?`${anoAnt}-07-01`:`${ano}-01-01`;
+        const semAntFim=semAtual===0?`${anoAnt}-12-31`:`${ano}-06-30`;
+        qeA=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${semAntIni}&data_vencimento=lte.${semAntFim}`;
+        qsA=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${semAntIni}&data_vencimento=lte.${semAntFim}`;
+      }
+      if(FRONT){qeA+=`&front=eq.${encodeURIComponent(FRONT)}`;qsA+=`&front=eq.${encodeURIComponent(FRONT)}`;}
+      [entAnt,saiAnt]=await Promise.all([dbGet('lancamentos',qeA),dbGet('lancamentos',qsA)]);
+    }
 
     const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -2595,21 +2730,56 @@ async function loadDRE(){
     Object.values(catSaida).forEach(arr=>arr.forEach((v,i)=>totSaiMes[i]+=v));
     const resultMes=totEntMes.map((v,i)=>v-totSaiMes[i]);
 
-    const renderLinhas=(obj,cor)=>Object.entries(obj).map(([cat,vals])=>`
-      <tr style="font-size:12px">
+    // Totais por categoria do período anterior
+    const catEntAnt={},catSaiAnt={};
+    entAnt.forEach(l=>{const cat=l.categorias?.nome||'Sem categoria';catEntAnt[cat]=(catEntAnt[cat]||0)+Number(l.valor);});
+    saiAnt.forEach(l=>{const cat=l.categorias?.nome||'Sem categoria';catSaiAnt[cat]=(catSaiAnt[cat]||0)+Number(l.valor);});
+
+    const renderLinhas=(obj,cor,objAnt)=>Object.entries(obj).map(([cat,vals])=>{
+      const total=vals.reduce((a,b)=>a+b,0);
+      const totalAnt=objAnt?objAnt[cat]||0:0;
+      const pct=comparar&&totalAnt>0?Math.round(((total-totalAnt)/totalAnt)*100):null;
+      const deltaStr=(()=>{
+        if(pct===null) return '';
+        const dc=pct>=0?'var(--green)':'var(--red)';
+        return `<span style="font-size:10px;color:${dc};margin-left:4px">${pct>=0?'+':''}${pct}%</span>`;
+      })();
+      return `<tr style="font-size:12px">
         <td style="padding-left:24px;color:var(--text-2)">${cat}</td>
         ${vals.map(v=>`<td class="td-mono" style="color:${cor};text-align:right">${v>0?fmt(v):'—'}</td>`).join('')}
-        <td class="td-mono" style="color:${cor};text-align:right;font-weight:700">${fmt(vals.reduce((a,b)=>a+b,0))}</td>
-      </tr>`).join('');
+        <td class="td-mono" style="color:${cor};text-align:right;font-weight:700">${fmt(total)}${deltaStr}</td>
+      </tr>`;}).join('');
+
+    // Calcular totais período anterior para comparativo
+    const totEntAnt = entAnt.reduce((s,l)=>s+Number(l.valor||0),0);
+    const totSaiAnt = saiAnt.reduce((s,l)=>s+Number(l.valor||0),0);
+    const resultAnt = totEntAnt - totSaiAnt;
+    const totEntAtual = entradas.reduce((s,l)=>s+Number(l.valor||0),0);
+    const totSaiAtual = saidas.reduce((s,l)=>s+Number(l.valor||0),0);
+    const resultAtual = totEntAtual - totSaiAtual;
+
+    const delta=(atual,ant)=>{
+      if(!comparar||!ant) return '';
+      const pct=ant>0?Math.round(((atual-ant)/ant)*100):null;
+      if(pct===null) return '';
+      const cor=pct>=0?'var(--green)':'var(--red)';
+      return `<span style="font-size:10px;color:${cor};margin-left:6px">${pct>=0?'+':''}${pct}%</span>`;
+    };
 
     el.innerHTML=`
+    ${comparar?`<div style="padding:12px 16px;background:var(--blue-light);border-radius:var(--rlg);margin-bottom:12px;display:flex;gap:24px;font-size:12px">
+      <span><strong>Período atual:</strong> Receita ${fmt(totEntAtual)} · Despesa ${fmt(totSaiAtual)} · Resultado ${fmt(resultAtual)}</span>
+      <span style="color:var(--text-3)">|</span>
+      <span><strong>Período anterior:</strong> Receita ${fmt(totEntAnt)} · Despesa ${fmt(totSaiAnt)} · Resultado ${fmt(resultAnt)}</span>
+      <span>${delta(resultAtual,resultAnt)} vs período anterior</span>
+    </div>`:''}
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
       <thead>
         <tr style="background:var(--blue);color:#fff">
           <th style="padding:10px 14px;text-align:left;white-space:nowrap">Descrição</th>
           ${meses.map(m=>`<th style="padding:10px 8px;text-align:right;white-space:nowrap">${m}</th>`).join('')}
-          <th style="padding:10px 14px;text-align:right">Total</th>
+          <th style="padding:10px 14px;text-align:right">Total${comparar?' vs anterior':''}</th>
         </tr>
       </thead>
       <tbody>
@@ -2618,13 +2788,13 @@ async function loadDRE(){
           ${totEntMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(v)}</td>`).join('')}
           <td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(totEntMes.reduce((a,b)=>a+b,0))}</td>
         </tr>
-        ${renderLinhas(catEntrada,'var(--green)')}
+        ${renderLinhas(catEntrada,'var(--green)',catEntAnt)}
         <tr style="background:var(--red-bg)">
           <td style="padding:8px 14px;font-weight:700;color:var(--red)">DESPESAS</td>
           ${totSaiMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(v)}</td>`).join('')}
           <td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(totSaiMes.reduce((a,b)=>a+b,0))}</td>
         </tr>
-        ${renderLinhas(catSaida,'var(--red)')}
+        ${renderLinhas(catSaida,'var(--red)',catSaiAnt)}
         <tr style="background:var(--blue-light);border-top:2px solid var(--blue)">
           <td style="padding:10px 14px;font-weight:700;color:var(--blue)">RESULTADO</td>
           ${resultMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'}">${fmt(v)}</td>`).join('')}

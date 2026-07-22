@@ -443,7 +443,7 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="sb-item" id="nav-contratos" onclick="navigate('contratos')"><i class="ti ti-file-description"></i>Contratos</div>
       <div class="sb-item" id="nav-medicoes" onclick="navigate('medicoes')"><i class="ti ti-ruler-measure"></i>Medições</div>
       <div class="sb-sec">Financeiro</div>
-      <div class="sb-item" id="nav-financeiro" onclick="navigate('financeiro')"><i class="ti ti-report-money"></i>Financeiro <span id="badge-atraso" style="display:none;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px"></span></div>
+      <div class="sb-item" id="nav-financeiro" onclick="navigate('financeiro')"><i class="ti ti-report-money"></i>Financeiro <span id="badge-atraso" style="display:none;background:#dc2626;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px"></span></div>
       <div class="sb-item" id="nav-lancamentos" onclick="navigate('lancamentos')"><i class="ti ti-arrows-exchange"></i>Lançamentos</div>
       <div class="sb-item" id="nav-metas" onclick="navigate('metas')"><i class="ti ti-target"></i>Metas</div>
       <div class="sb-item" id="nav-categorias" onclick="navigate('categorias')"><i class="ti ti-tag"></i>Categorias</div>
@@ -1790,9 +1790,12 @@ async function pagarInline(medicaoId, contratoId, valorPrevisto){
     const hoje_pag = new Date();
     let dataVencReal = hoje_pag.toISOString().slice(0,10);
     if(ct.dia_vencimento){
-      // Pegar mês da medição (se disponível) ou mês atual
-      const mesRef = document.querySelector(`#med-table tr[data-contrato="${contratoId}"] `) ? null : null;
-      const vencDate = new Date(hoje_pag.getFullYear(), hoje_pag.getMonth(), ct.dia_vencimento);
+      // Travar no último dia do mês se dia > dias do mês
+      const ano_v = hoje_pag.getFullYear();
+      const mes_v = hoje_pag.getMonth();
+      const ultimoDia = new Date(ano_v, mes_v+1, 0).getDate(); // último dia do mês
+      const diaReal = Math.min(ct.dia_vencimento, ultimoDia);
+      const vencDate = new Date(ano_v, mes_v, diaReal);
       dataVencReal = vencDate.toISOString().slice(0,10);
     }
     const pagoComAtraso = dataVencReal < hoje_pag.toISOString().slice(0,10);
@@ -1975,9 +1978,16 @@ async function loadFinanceiro(){
     const inicioStr=`${anoFin}-01-01`;
 
     // Buscar TODOS os lançamentos relevantes
+    // Buscar lançamentos do ano selecionado
     let q=`select=*,clientes(nome)&order=data_vencimento.asc&data_vencimento=gte.${anoFin}-01-01&data_vencimento=lte.${anoFin}-12-31`;
+    // Buscar vencidos de qualquer período (sem filtro de data)
+    let qVenc=`select=*,clientes(nome)&status=eq.atrasado&order=data_vencimento.asc`;
     if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
-    const todos=await dbGet('lancamentos',q);
+    let [todos, todosVenc] = await Promise.all([
+      dbGet('lancamentos',q),
+      dbGet('lancamentos', FRONT ? qVenc+`&front=eq.${encodeURIComponent(FRONT)}` : qVenc)
+    ]);
+    if(FRONT) todos=todos.filter(l=>l.front===FRONT);
 
     // Atualizar status de vencidos automaticamente
     const aAtualizar=todos.filter(l=>l.status==='previsto'&&l.data_vencimento&&l.data_vencimento<hojeStr);
@@ -1987,10 +1997,10 @@ async function loadFinanceiro(){
     }
 
     // Separar por tipo e status
-    const recVencidos  = todos.filter(l=>l.tipo==='entrada'&&l.status==='atrasado');
+    const recVencidos  = todosVenc.filter(l=>l.tipo==='entrada');
     const recAReceber  = todos.filter(l=>l.tipo==='entrada'&&l.status==='previsto');
     const recRecebidos = todos.filter(l=>l.tipo==='entrada'&&l.status==='pago');
-    const pagVencidos  = todos.filter(l=>l.tipo==='saida'&&l.status==='atrasado');
+    const pagVencidos  = todosVenc.filter(l=>l.tipo==='saida');
     const pagAPagar    = todos.filter(l=>l.tipo==='saida'&&l.status==='previsto');
     const pagPagos     = todos.filter(l=>l.tipo==='saida'&&l.status==='pago');
 
@@ -2037,7 +2047,7 @@ async function loadFinanceiro(){
         (l.status!=='pago'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr))
       )).reduce((s,l)=>s+Number(l.valor||0),0);
       recGraf.push(entMes/1000);
-      pagGraf.push(saiMes/1000);
+      pagGraf.push(-(saiMes/1000)); // negativo = saída
       saldoAcum+=entMes-saiMes;
       saldoGraf.push(saldoAcum/1000);
     }
@@ -2064,7 +2074,7 @@ async function loadFinanceiro(){
           </div>
         </div>
         <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
-          <button class="btn btn-xs btn-out2 fin-tab-rec active-fin" onclick="switchFinTab(this,'rec','vencidos')" data-target="rec-vencidos">Vencidos</button>
+          <button class="btn btn-xs btn-pri fin-tab-rec active-fin" onclick="switchFinTab(this,'rec','vencidos')" data-target="rec-vencidos">Vencidos</button>
           <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','areceber')" data-target="rec-areceber">A receber</button>
           <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','recebidos')" data-target="rec-recebidos">Recebidos</button>
         </div>
@@ -2093,7 +2103,7 @@ async function loadFinanceiro(){
           </div>
         </div>
         <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
-          <button class="btn btn-xs btn-out2 fin-tab-pag active-fin" onclick="switchFinTab(this,'pag','vencidos')" data-target="pag-vencidos">Vencidos</button>
+          <button class="btn btn-xs btn-pri fin-tab-pag active-fin" onclick="switchFinTab(this,'pag','vencidos')" data-target="pag-vencidos">Vencidos</button>
           <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','apagar')" data-target="pag-apagar">A pagar</button>
           <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','pagos')" data-target="pag-pagos">Pagos</button>
         </div>
@@ -2126,7 +2136,7 @@ async function loadFinanceiro(){
       options:{responsive:true,maintainAspectRatio:false,
         plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12}}},
         scales:{
-          y:{ticks:{callback:v=>v>=0?'R$'+v+'k':'- R$'+Math.abs(v)+'k',font:{size:10}},grid:{color:'#f0f0f0'},border:{display:false}},
+          y:{ticks:{callback:v=>v>=0?'R$ '+v+'k':'- R$ '+Math.abs(v)+'k',font:{size:10}},grid:{color:'#f0f0f0'},border:{display:false}},
           x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{display:false},border:{display:false}}
         },
         interaction:{mode:'index',intersect:false}
@@ -2137,9 +2147,13 @@ async function loadFinanceiro(){
 }
 
 function switchFinTab(btn, grupo, tab){
-  document.querySelectorAll(`.fin-tab-${grupo}`).forEach(b=>b.classList.remove('active-fin','btn-pri'));
+  document.querySelectorAll(`.fin-tab-${grupo}`).forEach(b=>{
+    b.classList.remove('active-fin','btn-pri');
+    b.classList.add('btn-out2');
+  });
   document.querySelectorAll(`.fin-panel-${grupo}`).forEach(p=>p.style.display='none');
   btn.classList.add('active-fin','btn-pri');
+  btn.classList.remove('btn-out2');
   document.getElementById(`${grupo}-${tab}`).style.display='block';
 }
 

@@ -1281,7 +1281,7 @@ async function loadMedicoes(){
   el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
     const medChartContrato=window._ctFilter||'';
-    let ctQ=`select=id,descricao,front,clientes(nome)&order=criado_em.desc`;
+    let ctQ=`select=id,descricao,front,valor_total,tipo_cobranca,cliente_id,data_inicio,data_fim,clientes(nome)&order=criado_em.desc`;
     if(FRONT)ctQ+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const contratos=await dbGet('contratos',ctQ);
 
@@ -1290,6 +1290,7 @@ async function loadMedicoes(){
     // Filtrar por front se selecionado (via contrato vinculado)
     if(FRONT) meds=meds.filter(m=>m.contratos&&m.contratos.front===FRONT);
     window._medsCache = meds; // cache para totais
+    window._contratosCache = contratos; // cache para painel
 
     el.innerHTML=`
     <div class="fbar" style="margin-bottom:12px">
@@ -1314,7 +1315,7 @@ async function loadMedicoes(){
     <div class="card"><div class="tw"><table id="med-table">
     <thead><tr>
       <th>Contrato / Cliente</th><th>Mês</th><th>Previsto</th>
-      <th>Realizado</th><th>Saldo</th><th>Desvio</th><th>Status</th><th>Pago em</th><th style="width:100px"></th>
+      <th>Valor realizado / Pagamento</th><th>Saldo</th><th>Desvio</th><th>Status</th><th>Pago em</th><th style="width:100px"></th>
     </tr></thead>
     <tbody>${meds.length?meds.map(m=>{
       const dev=Number(m.desvio_percentual);
@@ -1325,14 +1326,28 @@ async function loadMedicoes(){
             <div style="font-size:11px;color:var(--text-3)">${m.contratos?m.contratos.descricao:''}</div></td>
         <td style="font-weight:500">${fmtMonth(m.mes_referencia)}</td>
         <td class="td-mono">${fmt(m.valor_previsto)}</td>
-        <td class="td-mono"><strong>${m.valor_medido>0?fmt(m.valor_medido):'<span style="color:var(--text-3)">—</span>'}</strong></td>
+        <td>
+          ${isPago
+            ? `<strong class="td-mono" style="color:var(--green)">${fmt(m.valor_medido)}</strong>`
+            : `<div style="display:flex;align-items:center;gap:6px">
+                <input type="number" step="0.01" id="real-${m.id}"
+                  value="${m.valor_medido>0?m.valor_medido:''}"
+                  placeholder="${(m.valor_previsto||0).toFixed(2)}"
+                  style="width:110px;height:28px;font-size:12px;padding:0 8px;border:1px solid var(--border-2);border-radius:var(--r);text-align:right"
+                  onkeydown="if(event.key==='Enter')pagarInline('${m.id}','${m.contrato_id}',${m.valor_previsto})">
+                <button class="btn btn-pri btn-xs" onclick="pagarInline('${m.id}','${m.contrato_id}',${m.valor_previsto})"
+                  title="Confirmar pagamento">
+                  <i class="ti ti-circle-check"></i> Pagar
+                </button>
+              </div>`
+          }
+        </td>
         <td class="td-mono" style="color:var(--text-2)">${m.valor_medido>0?fmt(m.saldo):'—'}</td>
         <td class="${dc}">${m.valor_medido>0?(dev>0?'+':'')+dev.toFixed(1)+'%':'—'}</td>
         <td>${isPago?'<span class="badge badge-green badge-dot">Pago</span>':'<span class="badge badge-amber badge-dot">Pendente</span>'}</td>
         <td style="font-size:12px;color:var(--text-2)">${fmtDate(m.data_pagamento)}</td>
         <td><div class="td-actions">
-          ${!isPago?`<button class="btn btn-out2 btn-xs" title="Marcar como pago" onclick="marcarPago('${m.id}',${m.valor_medido},${m.valor_previsto},'${m.contrato_id}')"><i class="ti ti-circle-check"></i> Pagar</button>`:''}
-          ${isPago?`<button class="btn btn-del btn-xs" title="Estornar pagamento" onclick="estornarPagamento('${m.id}','${m.lancamento_id||''}')"><i class="ti ti-rotate-clockwise"></i></button>`:''}
+          ${isPago?`<button class="btn btn-del btn-xs" title="Estornar pagamento" onclick="estornarPagamento('${m.id}','${m.lancamento_id||''}')"><i class="ti ti-rotate-clockwise"></i> Estornar</button>`:''}
           <button class="btn btn-out2 btn-xs" onclick="openMedicaoModal(${JSON.stringify(m).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-del btn-xs" onclick="deleteMedicao('${m.id}')"><i class="ti ti-trash"></i></button>
         </div></td>
@@ -1362,110 +1377,6 @@ async function loadMedicoes(){
       window._ctFilter='';
     }
 
-    // ── PAINEL DE RESUMO DO CONTRATO (quando filtro ativo) ──
-    if(medChartContrato && meds.length>0){
-      const medsCt = meds.filter(m=>m.contrato_id===medChartContrato)
-        .sort((a,b)=>a.mes_referencia.localeCompare(b.mes_referencia));
-
-      // Buscar dados do contrato
-      const ctData = contratos.find(ct=>ct.id===medChartContrato);
-      const valorContrato = ctData ? Number(ctData.valor_total) : 0;
-
-      // Totais
-      const totalPrevisto  = medsCt.reduce((s,m)=>s+Number(m.valor_previsto||0),0);
-      const totalMedido    = medsCt.reduce((s,m)=>s+Number(m.valor_medido||0),0);
-      const totalPago      = medsCt.filter(m=>m.status==='pago').reduce((s,m)=>s+Number(m.valor_medido||0),0);
-      const saldoRestante  = valorContrato - totalMedido;
-      const percAvanco     = valorContrato>0 ? Math.min(Math.round((totalMedido/valorContrato)*100),100) : 0;
-      const mesesMedidos   = medsCt.filter(m=>Number(m.valor_medido||0)>0).length;
-      const totalMeses     = medsCt.length;
-
-      const corAvanco = percAvanco>=100?'var(--green)':percAvanco>=60?'var(--blue)':'var(--gold)';
-
-      const resumoHtml = `
-      <div class="card" style="margin-bottom:16px;border-top:3px solid var(--blue)">
-        <div class="card-header">
-          <div>
-            <h3><i class="ti ti-file-description" style="margin-right:6px;color:var(--blue)"></i>
-              ${ctData?ctData.descricao:'Contrato'}</h3>
-            <div class="card-sub">Acompanhamento detalhado — ${totalMeses} mês(es) no período</div>
-          </div>
-          <span class="badge badge-navy">${percAvanco}% concluído</span>
-        </div>
-        <div style="padding:16px 20px">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
-            <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
-              <div class="klbl">Valor contratado</div>
-              <div class="kval">${fmt(valorContrato)}</div>
-            </div>
-            <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
-              <div class="klbl">Total medido</div>
-              <div class="kval" style="color:var(--blue)">${fmt(totalMedido)}</div>
-              <div class="ksub">${mesesMedidos} de ${totalMeses} meses</div>
-            </div>
-            <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
-              <div class="klbl">Total pago</div>
-              <div class="kval" style="color:var(--green)">${fmt(totalPago)}</div>
-              <div class="ksub">${medsCt.filter(m=>m.status==='pago').length} parcela(s) paga(s)</div>
-            </div>
-            <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid ${saldoRestante<0?'var(--red)':'var(--border)'}">
-              <div class="klbl">Saldo restante</div>
-              <div class="kval" style="color:${saldoRestante<0?'var(--red)':saldoRestante===0?'var(--green)':'var(--text-2)'}">${fmt(Math.abs(saldoRestante))}${saldoRestante<0?' (excedido)':''}</div>
-              <div class="ksub">${valorContrato>0?Math.round(((valorContrato-totalMedido)/valorContrato)*100)+'% restante':'—'}</div>
-            </div>
-          </div>
-          <div style="margin-top:4px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-bottom:5px">
-              <span>Avanço do contrato</span>
-              <span style="font-weight:700;color:${corAvanco}">${percAvanco}%</span>
-            </div>
-            <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
-              <div style="width:${percAvanco}%;height:100%;background:${corAvanco};border-radius:5px;transition:.4s"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:4px">
-              <span>R$ 0</span>
-              <span>${fmt(valorContrato)}</span>
-            </div>
-          </div>
-        </div>
-      </div>`;
-
-      const existingResumo = el.querySelector('.resumo-contrato');
-      if(!existingResumo){
-        const resumoEl = document.createElement('div');
-        resumoEl.className = 'resumo-contrato';
-        resumoEl.innerHTML = resumoHtml;
-        el.insertBefore(resumoEl, el.firstChild);
-      }
-
-      // Adicionar coluna de acumulado na tabela
-      const thead = el.querySelector('#med-table thead tr');
-      if(thead && !thead.querySelector('.col-acum')){
-        const th = document.createElement('th');
-        th.className = 'col-acum';
-        th.textContent = 'Acumulado';
-        thead.insertBefore(th, thead.children[5]); // antes de Status
-      }
-
-      // Preencher acumulado linha a linha (ordenado por mês)
-      let acum = 0;
-      const rows = el.querySelectorAll('#med-table tbody tr');
-      // Mapear linhas por contrato+mes para inserir acumulado
-      const medsOrdenadas = [...medsCt];
-      medsOrdenadas.forEach(m=>{
-        acum += Number(m.valor_medido||0);
-        const mes = m.mes_referencia?m.mes_referencia.slice(0,7):'';
-        const tr = [...rows].find(r=>r.dataset.contrato===m.contrato_id&&r.dataset.mes===mes);
-        if(tr && !tr.querySelector('.col-acum-td')){
-          const td = document.createElement('td');
-          td.className = 'col-acum-td td-mono';
-          td.style.color = 'var(--blue)';
-          td.textContent = acum>0?fmt(acum):'—';
-          tr.insertBefore(td, tr.children[5]); // antes de Status
-        }
-      });
-    }
-
     // Gráfico por contrato se filtro ativo
     if(medChartContrato && meds.length>0){
       const medsFiltradas=meds.filter(m=>m.contrato_id===medChartContrato)
@@ -1492,6 +1403,176 @@ async function loadMedicoes(){
       }
     }
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
+}
+
+async function gerarMesesFaltantes(ctId){
+  try{
+    // Buscar contrato completo com datas
+    const cts = await dbGet('contratos', `select=*,clientes(nome)&id=eq.${ctId}`);
+    const ct = cts[0];
+    if(!ct || !ct.data_inicio || !ct.data_fim){
+      notify('Contrato sem datas definidas','error');
+      return;
+    }
+
+    // Gerar lista de meses do período
+    const inicio = new Date(ct.data_inicio+'T12:00:00');
+    const fim    = new Date(ct.data_fim+'T12:00:00');
+    const mesesPeriodo = [];
+    const d = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+    const fimMes = new Date(fim.getFullYear(), fim.getMonth(), 1);
+    while(d <= fimMes){
+      mesesPeriodo.push(d.toISOString().slice(0,7)+'-01');
+      d.setMonth(d.getMonth()+1);
+    }
+
+    // Buscar medições já existentes
+    const existentes = await dbGet('medicoes', `select=mes_referencia&contrato_id=eq.${ctId}`);
+    const mesesExist = new Set(existentes.map(m=>m.mes_referencia));
+
+    // Filtrar apenas os que faltam
+    const faltantes = mesesPeriodo.filter(m=>!mesesExist.has(m));
+
+    if(faltantes.length === 0){
+      notify('Todos os meses do período já estão gerados','info');
+      return;
+    }
+
+    const nMeses = mesesPeriodo.length || 1;
+    const valorPrevisto = ct.tipo_cobranca === 'mensal_fixo'
+      ? Math.round((Number(ct.valor_total) / nMeses)*100)/100
+      : Number(ct.valor_total);
+
+    if(!confirm(`Gerar ${faltantes.length} mês(es) faltante(s) de ${fmt(valorPrevisto)}/mês?
+
+Período: ${mesesPeriodo[0].slice(0,7)} → ${mesesPeriodo[mesesPeriodo.length-1].slice(0,7)}`)) return;
+
+    await Promise.all(faltantes.map(mes=>
+      dbInsert('medicoes',{
+        contrato_id: ctId,
+        mes_referencia: mes,
+        valor_previsto: valorPrevisto,
+        valor_medido: 0,
+        status: 'pendente',
+        observacao: null
+      })
+    ));
+
+    notify(`${faltantes.length} medição(ões) gerada(s) com sucesso!`, 'success');
+    loadMedicoes();
+  }catch(e){ notify('Erro: '+e.message,'error'); }
+}
+
+function renderPainelContrato(ctId){
+  const meds = window._medsCache||[];
+  const contratos = window._contratosCache||[];
+  const el = document.getElementById('medicoes-content');
+  if(!el) return;
+
+  // Remover painel anterior
+  const old = el.querySelector('.resumo-contrato');
+  if(old) old.remove();
+  // Remover coluna acumulado anterior
+  el.querySelectorAll('.col-acum, .col-acum-td').forEach(e=>e.remove());
+
+  if(!ctId) return;
+
+  const medsCt = meds.filter(m=>m.contrato_id===ctId)
+    .sort((a,b)=>a.mes_referencia.localeCompare(b.mes_referencia));
+  if(!medsCt.length) return;
+
+  const ctData = contratos.find(ct=>ct.id===ctId);
+  const valorContrato = ctData ? Number(ctData.valor_total) : 0;
+  const totalMedido   = medsCt.reduce((s,m)=>s+Number(m.valor_medido||0),0);
+  const totalPago     = medsCt.filter(m=>m.status==='pago').reduce((s,m)=>s+Number(m.valor_medido||0),0);
+  const saldoRestante = valorContrato - totalMedido;
+  const percAvanco    = valorContrato>0?Math.min(Math.round((totalMedido/valorContrato)*100),100):0;
+  const mesesMedidos  = medsCt.filter(m=>Number(m.valor_medido||0)>0).length;
+  const totalMeses    = medsCt.length;
+  const corAvanco     = percAvanco>=100?'var(--green)':percAvanco>=60?'var(--blue)':'var(--gold)';
+
+  const resumoEl = document.createElement('div');
+  resumoEl.className = 'resumo-contrato';
+  resumoEl.innerHTML = `
+  <div class="card" style="margin-bottom:16px;border-top:3px solid var(--blue)">
+    <div class="card-header">
+      <div>
+        <h3><i class="ti ti-file-description" style="margin-right:6px;color:var(--blue)"></i>
+          ${ctData?ctData.descricao:'Contrato'}</h3>
+        <div class="card-sub">${totalMeses} mês(es) gerado(s) · ${ctData?ctData.clientes?.nome||'':''}${ctData?(' — '+['Nacasa Comunicação','Nacasa Educação'].find(f=>f===ctData.front)||''):''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge badge-navy">${percAvanco}% concluído</span>
+        ${ctData&&ctData.data_inicio&&ctData.data_fim?`
+        <button class="btn btn-out2 btn-sm" onclick="gerarMesesFaltantes('${ctId}')">
+          <i class="ti ti-calendar-plus"></i> Gerar meses faltantes
+        </button>`:''}
+      </div>
+    </div>
+    <div style="padding:16px 20px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+        <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
+          <div class="klbl">Valor contratado</div>
+          <div class="kval">${fmt(valorContrato)}</div>
+        </div>
+        <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
+          <div class="klbl">Total medido</div>
+          <div class="kval" style="color:var(--blue)">${fmt(totalMedido)}</div>
+          <div class="ksub">${mesesMedidos} de ${totalMeses} meses</div>
+        </div>
+        <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid var(--border)">
+          <div class="klbl">Total pago</div>
+          <div class="kval" style="color:var(--green)">${fmt(totalPago)}</div>
+          <div class="ksub">${medsCt.filter(m=>m.status==='pago').length} parcela(s) confirmada(s)</div>
+        </div>
+        <div style="background:var(--surface-2);border-radius:var(--rlg);padding:14px;border:1px solid ${saldoRestante<0?'var(--red)':'var(--border)'}">
+          <div class="klbl">Saldo a medir</div>
+          <div class="kval" style="color:${saldoRestante<0?'var(--red)':saldoRestante===0?'var(--green)':'var(--text-2)'}">
+            ${fmt(Math.abs(saldoRestante))}${saldoRestante<0?' (excedido)':''}
+          </div>
+          <div class="ksub">${valorContrato>0?Math.round(((valorContrato-totalMedido)/valorContrato)*100)+'% restante':'—'}</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-bottom:5px">
+          <span>Avanço financeiro</span>
+          <span style="font-weight:700;color:${corAvanco}">${percAvanco}%</span>
+        </div>
+        <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
+          <div style="width:${percAvanco}%;height:100%;background:${corAvanco};border-radius:5px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:4px">
+          <span>R$ 0</span><span>${fmt(valorContrato)}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  el.insertBefore(resumoEl, el.firstChild);
+
+  // Coluna acumulado na tabela
+  const thead = el.querySelector('#med-table thead tr');
+  if(thead && !thead.querySelector('.col-acum')){
+    const th = document.createElement('th');
+    th.className = 'col-acum';
+    th.textContent = 'Acumulado';
+    thead.insertBefore(th, thead.children[5]);
+  }
+  let acum = 0;
+  const rows = el.querySelectorAll('#med-table tbody tr');
+  medsCt.forEach(m=>{
+    acum += Number(m.valor_medido||0);
+    const mes = m.mes_referencia?m.mes_referencia.slice(0,7):'';
+    const tr = [...rows].find(r=>r.dataset.contrato===ctId&&r.dataset.mes===mes);
+    if(tr && !tr.querySelector('.col-acum-td')){
+      const td = document.createElement('td');
+      td.className = 'col-acum-td td-mono';
+      td.style.color = 'var(--blue)';
+      td.textContent = acum>0?fmt(acum):'—';
+      tr.insertBefore(td, tr.children[5]);
+    }
+  });
 }
 
 function applyMedFilter(){
@@ -1534,6 +1615,53 @@ function applyMedFilter(){
   setCol('med-tot-saldo', totReal>0?fmt(saldo):'—', saldo<0?'var(--red)':saldo>0?'var(--green)':'var(--text-3)');
   setCol('med-tot-dev', totReal>0?(dev>=0?'+':'')+dev.toFixed(1)+'%':'—', dev>=0?'var(--green)':'var(--red)');
   setEl('med-tot-pago', totalCount>0?`${pagoCount} de ${totalCount} pagos`:'—');
+
+  // Atualizar painel do contrato
+  renderPainelContrato(ct);
+}
+
+async function pagarInline(medicaoId, contratoId, valorPrevisto){
+  const input = document.getElementById('real-'+medicaoId);
+  const valorDigitado = input ? parseFloat(input.value) : 0;
+
+  if(!valorDigitado || valorDigitado <= 0){
+    // Se não digitou, usar valor previsto como sugestão
+    if(input) input.focus();
+    notify('Informe o valor realizado antes de confirmar o pagamento','error');
+    return;
+  }
+
+  try{
+    const cts = await dbGet('contratos',`select=id,descricao,front,cliente_id,clientes(nome)&id=eq.${contratoId}`);
+    const ct = cts[0];
+    if(!ct){notify('Contrato não encontrado','error');return;}
+
+    // Criar lançamento de entrada
+    const lancs = await dbInsert('lancamentos',{
+      front: ct.front,
+      tipo: 'entrada',
+      status: 'pago',
+      descricao: `Medição paga — ${ct.descricao}${ct.clientes?' ('+ct.clientes.nome+')':''}`,
+      valor: valorDigitado,
+      data_vencimento: new Date().toISOString().slice(0,10),
+      data_pagamento: new Date().toISOString().slice(0,10),
+      cliente_id: ct.cliente_id||null,
+      contrato_id: contratoId,
+    });
+
+    const lancamentoId = lancs&&lancs[0] ? lancs[0].id : null;
+
+    // Atualizar medição
+    await dbUpdate('medicoes', medicaoId, {
+      valor_medido: valorDigitado,
+      status: 'pago',
+      lancamento_id: lancamentoId,
+      data_pagamento: new Date().toISOString().slice(0,10)
+    });
+
+    notify(`Pagamento de ${fmt(valorDigitado)} confirmado — lançamento criado!`, 'success');
+    loadMedicoes();
+  }catch(e){ notify('Erro: '+e.message,'error'); }
 }
 
 async function marcarPago(medicaoId, valorMedido, valorPrevisto, contratoId){

@@ -1044,7 +1044,7 @@ async function loadClientes(){
       <td><div class="td-primary">${r.nome}</div>${r.contato?`<div style="font-size:11px;color:var(--text-3);margin-top:1px">${r.contato}</div>`:''}</td>
       <td>${frontTag(r.front)}</td>
       <td><span class="badge badge-gray">${r.tipo_pessoa||'—'}</span></td>
-      <td class="td-mono"><strong style="color:\${recPorCliente[r.id]>0?'var(--green)':'var(--text-3)'}">\${recPorCliente[r.id]>0?fmt(recPorCliente[r.id]):'—'}</strong></td>
+      <td class="td-mono"><strong style="color:${recPorCliente[r.id]>0?'var(--green)':'var(--text-3)'}">${recPorCliente[r.id]>0?fmt(recPorCliente[r.id]):'—'}</strong></td>
       <td style="color:var(--text-2)">${r.email||'—'}</td>
       <td style="color:var(--text-2)">${r.telefone||'—'}</td>
       <td style="color:var(--text-2)">${r.origem||'—'}</td>
@@ -3162,4 +3162,4 @@ document.addEventListener('keydown',e=>{
 });
 </script>
 </body>
-</html>
+<ong style="color:${recPorCliente[r.id]>0?'var(--green)':'var(--text-3)'}">${recPorCliente[r.id]>0?fmt(recPorCliente[r.id]):'—'}</strong></td>>

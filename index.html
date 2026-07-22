@@ -1208,9 +1208,10 @@ async function gerarMedicoesAuto(contratoId, data){
     meses.push(new Date(inicio.getFullYear(), inicio.getMonth(), 1).toISOString().slice(0,7)+'-01');
   }
   const nMeses = meses.length || 1;
+  // mensal_fixo: valor_total JÁ É o valor mensal
   const valorPrevisto = data.tipo_cobranca==='mensal_fixo'
-    ? Math.round((data.valor_total/nMeses)*100)/100
-    : data.valor_total;
+    ? Number(data.valor_total)
+    : Math.round((Number(data.valor_total)/nMeses)*100)/100;
   try{
     await Promise.all(meses.map(mes=>dbInsert('medicoes',{
       contrato_id: contratoId,
@@ -1439,9 +1440,11 @@ async function gerarMesesFaltantes(ctId){
     }
 
     const nMeses = mesesPeriodo.length || 1;
+    // mensal_fixo: valor_total JÁ É o valor mensal
+    // por_projeto/por_entrega: valor_total é o total, divide pelos meses
     const valorPrevisto = ct.tipo_cobranca === 'mensal_fixo'
-      ? Math.round((Number(ct.valor_total) / nMeses)*100)/100
-      : Number(ct.valor_total);
+      ? Number(ct.valor_total)
+      : Math.round((Number(ct.valor_total) / nMeses)*100)/100;
 
     if(!confirm(`Gerar ${faltantes.length} mês(es) faltante(s) de ${fmt(valorPrevisto)}/mês?
 

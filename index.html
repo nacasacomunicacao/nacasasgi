@@ -1009,19 +1009,6 @@ async function loadClientes(){
         <button class="btn btn-danger btn-xs" onclick="deleteCliente('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><i class="ti ti-users"></i><div class="empty-title">Nenhum cliente cadastrado</div><p>Clique em "Novo cliente" para começar.</p></div></td></tr>`}</tbody>
-        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
-      <tr>
-        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
-          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
-        </td>
-        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
-        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
-        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
-        <td colspan="2" style="padding:10px 14px"></td>
-      </tr>
-    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1114,19 +1101,6 @@ async function loadContratos(){
           <button class="btn btn-danger btn-xs" onclick="deleteContrato('${r.id}')"><i class="ti ti-trash"></i></button>
         </div></td>
     </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><i class="ti ti-file-description"></i><div class="empty-title">Nenhum contrato cadastrado</div><p>Clique em "Novo contrato" para começar.</p></div></td></tr>`}</tbody>
-        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
-      <tr>
-        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
-          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
-        </td>
-        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
-        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
-        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
-        <td colspan="2" style="padding:10px 14px"></td>
-      </tr>
-    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -1872,19 +1846,6 @@ async function loadLancamentos(){
         <button class="btn btn-danger btn-xs" onclick="deleteLancamento('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`).join(''):`<tr><td colspan="11"><div class="empty"><i class="ti ti-arrows-exchange"></i><div class="empty-title">Nenhum lançamento registrado</div><p>Registre entradas e saídas para visualizar o fluxo de caixa.</p></div></td></tr>`}</tbody>
-        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
-      <tr>
-        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
-          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
-        </td>
-        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
-        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
-        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
-        <td colspan="2" style="padding:10px 14px"></td>
-      </tr>
-    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -2065,19 +2026,6 @@ async function loadMetas(){
         <button class="btn btn-danger btn-xs" onclick="deleteMeta('${r.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`).join(''):`<tr><td colspan="4"><div class="empty"><i class="ti ti-target"></i><div class="empty-title">Nenhuma meta definida</div><p>Defina metas mensais por front para ativar o indicador de progresso no dashboard.</p></div></td></tr>`}</tbody>
-        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
-      <tr>
-        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
-          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
-        </td>
-        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
-        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
-        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
-        <td colspan="2" style="padding:10px 14px"></td>
-      </tr>
-    </tfoot>
     </table></div></div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
@@ -2236,19 +2184,6 @@ async function loadFunil(){
     <div class="card"><div class="tw"><table id="funil-table">
       <thead><tr><th>Lead</th><th>Front</th><th>Produto</th><th>Etapa</th><th>Temperatura</th><th>Valor potencial</th><th>Origem</th><th>Entrada</th><th style="width:80px"></th></tr></thead>
       <tbody>${rows||`<tr><td colspan="9"><div class="empty"><i class="ti ti-filter"></i><div class="et">Nenhum lead cadastrado</div></div></td></tr>`}</tbody>
-        <tfoot id="med-tfoot" style="background:var(--blue-light);font-weight:700">
-      <tr>
-        <td colspan="2" style="padding:10px 14px;color:var(--blue);font-size:12px">
-          <i class="ti ti-sigma" style="margin-right:4px"></i>TOTAL VISÍVEL
-        </td>
-        <td id="med-tot-prev" class="td-mono" style="padding:10px 14px;color:var(--blue)">—</td>
-        <td id="med-tot-real" class="td-mono" style="padding:10px 14px;color:var(--green)">—</td>
-        <td id="med-tot-saldo" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-dev" class="td-mono" style="padding:10px 14px">—</td>
-        <td id="med-tot-pago" style="padding:10px 14px;font-size:12px">—</td>
-        <td colspan="2" style="padding:10px 14px"></td>
-      </tr>
-    </tfoot>
     </table></div></div>`;
   // Injetar gráficos antes da tabela
   const tableEl = el.querySelector('.card');

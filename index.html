@@ -493,11 +493,10 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="topbar">
         <div><div class="pg-title">Financeiro</div><div class="pg-sub">Contas a receber, a pagar e fluxo de caixa</div></div>
         <div style="display:flex;gap:8px;align-items:center">
-          <select id="fin-periodo" onchange="loadFinanceiro()" style="height:32px;font-size:12px">
-            <option value="30">Próximos 30 dias</option>
-            <option value="60">Próximos 60 dias</option>
-            <option value="90">Próximos 90 dias</option>
-            <option value="365">Este ano</option>
+          <select id="fin-ano" onchange="loadFinanceiro()" style="height:32px;font-size:12px;width:90px">
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+            <option value="2027">2027</option>
           </select>
         </div>
       </div>
@@ -1971,11 +1970,12 @@ async function loadFinanceiro(){
   try{
     const hoje=new Date();
     const hojeStr=hoje.toISOString().slice(0,10);
-    const periodo=parseInt(document.getElementById('fin-periodo')?.value||'30');
-    const fimStr=new Date(hoje.getTime()+periodo*24*60*60*1000).toISOString().slice(0,10);
+    const anoFin=parseInt(document.getElementById('fin-ano')?.value||hoje.getFullYear());
+    const fimStr=`${anoFin}-12-31`;
+    const inicioStr=`${anoFin}-01-01`;
 
     // Buscar TODOS os lançamentos relevantes
-    let q=`select=*,clientes(nome)&order=data_vencimento.asc`;
+    let q=`select=*,clientes(nome)&order=data_vencimento.asc&data_vencimento=gte.${anoFin}-01-01&data_vencimento=lte.${anoFin}-12-31`;
     if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
     const todos=await dbGet('lancamentos',q);
 
@@ -1988,10 +1988,10 @@ async function loadFinanceiro(){
 
     // Separar por tipo e status
     const recVencidos  = todos.filter(l=>l.tipo==='entrada'&&l.status==='atrasado');
-    const recAReceber  = todos.filter(l=>l.tipo==='entrada'&&l.status==='previsto'&&l.data_vencimento>=hojeStr&&l.data_vencimento<=fimStr);
+    const recAReceber  = todos.filter(l=>l.tipo==='entrada'&&l.status==='previsto');
     const recRecebidos = todos.filter(l=>l.tipo==='entrada'&&l.status==='pago');
     const pagVencidos  = todos.filter(l=>l.tipo==='saida'&&l.status==='atrasado');
-    const pagAPagar    = todos.filter(l=>l.tipo==='saida'&&l.status==='previsto'&&l.data_vencimento>=hojeStr&&l.data_vencimento<=fimStr);
+    const pagAPagar    = todos.filter(l=>l.tipo==='saida'&&l.status==='previsto');
     const pagPagos     = todos.filter(l=>l.tipo==='saida'&&l.status==='pago');
 
     const soma=arr=>arr.reduce((s,l)=>s+Number(l.valor||0),0);
@@ -2021,23 +2021,24 @@ async function loadFinanceiro(){
       }).join('')+(items.length>15?`<div style="padding:10px 16px;font-size:12px;color:var(--text-3);text-align:center">+${items.length-15} mais</div>`:'');
     };
 
-    // Gráfico de fluxo de caixa (próximos 30 dias + histórico 30 dias)
-    const ini30=new Date(hoje); ini30.setDate(ini30.getDate()-30);
-    const ini30Str=ini30.toISOString().slice(0,10);
-    const diasGraf=[];
-    const recGraf=[];
-    const pagGraf=[];
+    // Gráfico de fluxo de caixa MENSAL
+    const anoGraf=parseInt(document.getElementById('fin-ano')?.value||new Date().getFullYear());
+    const mesesGraf=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const recGraf=[],pagGraf=[],saldoGraf=[];
     let saldoAcum=0;
-    const saldoGraf=[];
-    for(let i=-30;i<=periodo;i++){
-      const d=new Date(hoje); d.setDate(d.getDate()+i);
-      const ds=d.toISOString().slice(0,10);
-      diasGraf.push(d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}));
-      const entDia=todos.filter(l=>l.tipo==='entrada'&&(l.data_pagamento===ds||(l.status!=='pago'&&l.data_vencimento===ds))).reduce((s,l)=>s+Number(l.valor||0),0);
-      const saiDia=todos.filter(l=>l.tipo==='saida'&&(l.data_pagamento===ds||(l.status!=='pago'&&l.data_vencimento===ds))).reduce((s,l)=>s+Number(l.valor||0),0);
-      recGraf.push(entDia/1000);
-      pagGraf.push(-saiDia/1000);
-      saldoAcum+=entDia-saiDia;
+    for(let m=0;m<12;m++){
+      const mesStr=`${anoGraf}-${String(m+1).padStart(2,'0')}`;
+      const entMes=todos.filter(l=>l.tipo==='entrada'&&(
+        (l.status==='pago'&&l.data_pagamento&&l.data_pagamento.startsWith(mesStr))||
+        (l.status!=='pago'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr))
+      )).reduce((s,l)=>s+Number(l.valor||0),0);
+      const saiMes=todos.filter(l=>l.tipo==='saida'&&(
+        (l.status==='pago'&&l.data_pagamento&&l.data_pagamento.startsWith(mesStr))||
+        (l.status!=='pago'&&l.data_vencimento&&l.data_vencimento.startsWith(mesStr))
+      )).reduce((s,l)=>s+Number(l.valor||0),0);
+      recGraf.push(entMes/1000);
+      pagGraf.push(saiMes/1000);
+      saldoAcum+=entMes-saiMes;
       saldoGraf.push(saldoAcum/1000);
     }
 
@@ -2105,7 +2106,7 @@ async function loadFinanceiro(){
     <!-- FLUXO DE CAIXA -->
     <div class="card">
       <div class="card-header">
-        <div><h3>Fluxo de Caixa</h3><div class="card-sub">Últimos 30 dias + próximos ${periodo} dias</div></div>
+        <div><h3>Fluxo de Caixa</h3><div class="card-sub">${anoGraf} — visão mensal</div></div>
       </div>
       <div class="card-body"><div style="position:relative;height:260px"><canvas id="chart-fluxo"></canvas></div></div>
     </div>`;
@@ -2115,10 +2116,10 @@ async function loadFinanceiro(){
     window._chartFluxo=new Chart(document.getElementById('chart-fluxo'),{
       type:'line',
       data:{
-        labels:diasGraf,
+        labels:mesesGraf,
         datasets:[
           {label:'Recebimentos (R$k)',data:recGraf,borderColor:'var(--green)',backgroundColor:'rgba(22,163,74,.08)',fill:true,pointRadius:2,tension:.3,borderWidth:2},
-          {label:'Pagamentos (R$k)',data:pagGraf,borderColor:'var(--red)',backgroundColor:'rgba(220,38,38,.08)',fill:true,pointRadius:2,tension:.3,borderWidth:2},
+          {label:'Pagamentos (R$k)',data:pagGraf,borderColor:'var(--red)',backgroundColor:'rgba(220,38,38,.08)',fill:false,pointRadius:2,tension:.3,borderWidth:2,borderDash:[4,3]},
           {label:'Saldo acumulado (R$k)',data:saldoGraf,borderColor:'var(--blue)',pointRadius:3,tension:.3,borderWidth:2.5,borderDash:[]}
         ]
       },

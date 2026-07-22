@@ -1482,9 +1482,28 @@ function renderPainelContrato(ctId){
 
   const medsCt = meds.filter(m=>m.contrato_id===ctId)
     .sort((a,b)=>a.mes_referencia.localeCompare(b.mes_referencia));
-  if(!medsCt.length) return;
 
   const ctData = contratos.find(ct=>ct.id===ctId);
+  // Sem medições mas com contrato — mostrar painel só com botão de gerar
+  if(!medsCt.length){
+    if(!ctData) return;
+    const resumoEl = document.createElement('div');
+    resumoEl.className = 'resumo-contrato';
+    resumoEl.innerHTML = `
+    <div class="card" style="margin-bottom:16px;border-top:3px solid var(--gold)">
+      <div class="card-header">
+        <div>
+          <h3><i class="ti ti-file-description" style="margin-right:6px;color:var(--blue)"></i>${ctData.descricao}</h3>
+          <div class="card-sub">${ctData.clientes?.nome||''} · Nenhuma medição gerada ainda</div>
+        </div>
+        <button class="btn btn-pri btn-sm" onclick="gerarMesesFaltantes('${ctId}')">
+          <i class="ti ti-calendar-plus"></i> Gerar medições do período
+        </button>
+      </div>
+    </div>`;
+    el.insertBefore(resumoEl, el.firstChild);
+    return;
+  }
   const valorContrato = ctData ? Number(ctData.valor_total) : 0;
   const totalMedido   = medsCt.reduce((s,m)=>s+Number(m.valor_medido||0),0);
   const totalPago     = medsCt.filter(m=>m.status==='pago').reduce((s,m)=>s+Number(m.valor_medido||0),0);

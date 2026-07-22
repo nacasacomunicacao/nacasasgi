@@ -380,6 +380,7 @@ tbody tr:hover .td-actions{opacity:1}
   .modal{margin:8px;max-height:95vh}
   .fr{grid-template-columns:1fr}
 }
+.active-fin{background:var(--blue)!important;color:#fff!important;border-color:var(--blue)!important}
 </style>
 </head>
 <body>
@@ -442,6 +443,7 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="sb-item" id="nav-contratos" onclick="navigate('contratos')"><i class="ti ti-file-description"></i>Contratos</div>
       <div class="sb-item" id="nav-medicoes" onclick="navigate('medicoes')"><i class="ti ti-ruler-measure"></i>Medições</div>
       <div class="sb-sec">Financeiro</div>
+      <div class="sb-item" id="nav-financeiro" onclick="navigate('financeiro')"><i class="ti ti-report-money"></i>Financeiro <span id="badge-atraso" style="display:none;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px"></span></div>
       <div class="sb-item" id="nav-lancamentos" onclick="navigate('lancamentos')"><i class="ti ti-arrows-exchange"></i>Lançamentos</div>
       <div class="sb-item" id="nav-metas" onclick="navigate('metas')"><i class="ti ti-target"></i>Metas</div>
       <div class="sb-item" id="nav-categorias" onclick="navigate('categorias')"><i class="ti ti-tag"></i>Categorias</div>
@@ -486,6 +488,21 @@ tbody tr:hover .td-actions{opacity:1}
       <div class="topbar"><div><div class="pg-title">Medições</div><div class="pg-sub">Previsto × realizado por contrato</div></div><button class="btn btn-pri" onclick="openMedicaoModal()"><i class="ti ti-plus"></i>Nova medição</button></div>
       <div class="tb-div"></div>
       <div class="content" id="medicoes-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
+    </div>
+    <div id="section-financeiro" class="section">
+      <div class="topbar">
+        <div><div class="pg-title">Financeiro</div><div class="pg-sub">Contas a receber, a pagar e fluxo de caixa</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="fin-periodo" onchange="loadFinanceiro()" style="height:32px;font-size:12px">
+            <option value="30">Próximos 30 dias</option>
+            <option value="60">Próximos 60 dias</option>
+            <option value="90">Próximos 90 dias</option>
+            <option value="365">Este ano</option>
+          </select>
+        </div>
+      </div>
+      <div class="tb-div"></div>
+      <div class="content" id="financeiro-content"><div class="loading"><div class="spin"></div>Carregando...</div></div>
     </div>
     <div id="section-lancamentos" class="section">
       <div class="topbar"><div><div class="pg-title">Lançamentos</div><div class="pg-sub">Contas a pagar e a receber</div></div><button class="btn btn-pri" onclick="openLancamentoModal()"><i class="ti ti-plus"></i>Novo lançamento</button></div>
@@ -631,6 +648,17 @@ async function initApp(){
   const now=new Date();
   document.getElementById('dash-period').textContent=now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   navigate('dashboard');
+  // Verificar atrasos no background para atualizar badge
+  setTimeout(async()=>{
+    try{
+      const hoje_b=new Date().toISOString().slice(0,10);
+      let bq=`select=id&status=eq.previsto&tipo=eq.entrada&data_vencimento=lt.${hoje_b}`;
+      if(FRONT) bq+=`&front=eq.${encodeURIComponent(FRONT)}`;
+      const atrasados=await dbGet('lancamentos',bq);
+      const badge=document.getElementById('badge-atraso');
+      if(badge){badge.textContent=atrasados.length;badge.style.display=atrasados.length>0?'inline':'none';}
+    }catch(e){}
+  },2000);
 }
 
 function onFrontChange(){
@@ -651,6 +679,7 @@ function loadSection(sec){
   else if(sec==='clientes')loadClientes();
   else if(sec==='contratos')loadContratos();
   else if(sec==='medicoes')loadMedicoes();
+  else if(sec==='financeiro')loadFinanceiro();
   else if(sec==='lancamentos')loadLancamentos();
   else if(sec==='metas')loadMetas();
   else if(sec==='categorias')loadCategorias();
@@ -1179,6 +1208,10 @@ async function openContratoModal(c){
         <div><label>Data de início</label><input id="ct-ini" type="date" value="${c?c.data_inicio||'':''}"></div>
         <div><label>Data de término</label><input id="ct-fim" type="date" value="${c?c.data_fim||'':''}"></div>
       </div>
+      <div class="form-row">
+        <div><label>Dia de vencimento (1-31)</label><input id="ct-dia-venc" type="number" min="1" max="31" value="${c?c.dia_vencimento||'':''}" placeholder="Ex: 5 → vence todo dia 5"></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:2px"><span style="font-size:12px;color:var(--text-3)">Usado para calcular a data de vencimento de cada medição mensal automaticamente.</span></div>
+      </div>
       <div><label>Observações</label><textarea id="ct-obs" rows="2">${c?c.observacao||'':''}</textarea></div>
     </div></div>
     <div class="modal-footer">
@@ -1189,7 +1222,7 @@ async function openContratoModal(c){
 }
 
 async function saveContrato(id){
-  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:document.getElementById('ct-desc').value.trim(),valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
+  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:document.getElementById('ct-desc').value.trim(),valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,dia_vencimento:parseInt(document.getElementById('ct-dia-venc').value)||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
   if(!data.descricao){notify('Descrição é obrigatória','error');return;}
   if(!data.data_inicio||!data.data_fim){notify('Data de início e fim são obrigatórias','error');return;}
   try{
@@ -1754,6 +1787,17 @@ async function pagarInline(medicaoId, contratoId, valorPrevisto){
     const ct = cts[0];
     if(!ct){notify('Contrato não encontrado','error');return;}
 
+    // Calcular data de vencimento real com base no dia_vencimento do contrato
+    const hoje_pag = new Date();
+    let dataVencReal = hoje_pag.toISOString().slice(0,10);
+    if(ct.dia_vencimento){
+      // Pegar mês da medição (se disponível) ou mês atual
+      const mesRef = document.querySelector(`#med-table tr[data-contrato="${contratoId}"] `) ? null : null;
+      const vencDate = new Date(hoje_pag.getFullYear(), hoje_pag.getMonth(), ct.dia_vencimento);
+      dataVencReal = vencDate.toISOString().slice(0,10);
+    }
+    const pagoComAtraso = dataVencReal < hoje_pag.toISOString().slice(0,10);
+
     // Criar lançamento de entrada
     const lancs = await dbInsert('lancamentos',{
       front: ct.front,
@@ -1761,8 +1805,9 @@ async function pagarInline(medicaoId, contratoId, valorPrevisto){
       status: 'pago',
       descricao: `Medição paga — ${ct.descricao}${ct.clientes?' ('+ct.clientes.nome+')':''}`,
       valor: valorDigitado,
-      data_vencimento: new Date().toISOString().slice(0,10),
-      data_pagamento: new Date().toISOString().slice(0,10),
+      data_vencimento: dataVencReal,
+      data_pagamento: hoje_pag.toISOString().slice(0,10),
+      pago_com_atraso: pagoComAtraso,
       cliente_id: ct.cliente_id||null,
       contrato_id: contratoId,
     });
@@ -1789,7 +1834,7 @@ async function marcarPago(medicaoId, valorMedido, valorPrevisto, contratoId){
   }
   try{
     // Buscar dados do contrato para criar o lançamento
-    const cts=await dbGet('contratos',`select=id,descricao,front,cliente_id,clientes(nome)&id=eq.${contratoId}`);
+    const cts=await dbGet('contratos',`select=id,descricao,front,cliente_id,dia_vencimento,clientes(nome)&id=eq.${contratoId}`);
     const ct=cts[0];
     if(!ct){notify('Contrato não encontrado','error');return;}
 
@@ -1917,6 +1962,184 @@ async function deleteMedicao(id){
   if(!confirm('Excluir esta medição?'))return;
   try{await dbDelete('medicoes',id);notify('Medição excluída','info');loadMedicoes();}
   catch(e){notify('Erro: '+e.message,'error');}
+}
+
+// ── FINANCEIRO ──
+async function loadFinanceiro(){
+  const el=document.getElementById('financeiro-content');
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
+  try{
+    const hoje=new Date();
+    const hojeStr=hoje.toISOString().slice(0,10);
+    const periodo=parseInt(document.getElementById('fin-periodo')?.value||'30');
+    const fimStr=new Date(hoje.getTime()+periodo*24*60*60*1000).toISOString().slice(0,10);
+
+    // Buscar TODOS os lançamentos relevantes
+    let q=`select=*,clientes(nome)&order=data_vencimento.asc`;
+    if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
+    const todos=await dbGet('lancamentos',q);
+
+    // Atualizar status de vencidos automaticamente
+    const aAtualizar=todos.filter(l=>l.status==='previsto'&&l.data_vencimento&&l.data_vencimento<hojeStr);
+    if(aAtualizar.length>0){
+      await Promise.all(aAtualizar.map(l=>dbUpdate('lancamentos',l.id,{status:'atrasado'})));
+      aAtualizar.forEach(l=>{l.status='atrasado';});
+    }
+
+    // Separar por tipo e status
+    const recVencidos  = todos.filter(l=>l.tipo==='entrada'&&l.status==='atrasado');
+    const recAReceber  = todos.filter(l=>l.tipo==='entrada'&&l.status==='previsto'&&l.data_vencimento>=hojeStr&&l.data_vencimento<=fimStr);
+    const recRecebidos = todos.filter(l=>l.tipo==='entrada'&&l.status==='pago');
+    const pagVencidos  = todos.filter(l=>l.tipo==='saida'&&l.status==='atrasado');
+    const pagAPagar    = todos.filter(l=>l.tipo==='saida'&&l.status==='previsto'&&l.data_vencimento>=hojeStr&&l.data_vencimento<=fimStr);
+    const pagPagos     = todos.filter(l=>l.tipo==='saida'&&l.status==='pago');
+
+    const soma=arr=>arr.reduce((s,l)=>s+Number(l.valor||0),0);
+
+    // Atualizar badge na sidebar
+    const totalAtraso=recVencidos.length+pagVencidos.length;
+    const badge=document.getElementById('badge-atraso');
+    if(badge){badge.textContent=totalAtraso;badge.style.display=totalAtraso>0?'inline':'none';}
+
+    // Renderizar lista de lançamentos
+    const renderLista=(items,tipo)=>{
+      if(!items.length) return `<div class="empty" style="padding:20px"><i class="ti ti-check" style="font-size:24px;color:var(--green)"></i><p>Nenhum item</p></div>`;
+      return items.slice(0,15).map(l=>{
+        const dias=l.data_vencimento?Math.round((new Date(l.data_vencimento)-hoje)/(1000*60*60*24)):null;
+        const diasStr=dias===null?'':dias<0?`${Math.abs(dias)}d atraso`:dias===0?'Hoje':dias===1?'Amanhã':`em ${dias}d`;
+        const corDias=dias<0?'var(--red)':dias<=3?'var(--amber)':'var(--text-3)';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:600;font-size:13px;color:var(--navy)">${l.clientes?l.clientes.nome:l.descricao}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:1px">${l.clientes?l.descricao:''} ${l.pago_com_atraso?'<span style="color:var(--amber)">· pago com atraso</span>':''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;font-size:13px">${fmt(l.valor)}</div>
+            <div style="font-size:11px;color:${corDias};margin-top:1px">${tipo==='pago'?fmtDate(l.data_pagamento):diasStr}</div>
+          </div>
+        </div>`;
+      }).join('')+(items.length>15?`<div style="padding:10px 16px;font-size:12px;color:var(--text-3);text-align:center">+${items.length-15} mais</div>`:'');
+    };
+
+    // Gráfico de fluxo de caixa (próximos 30 dias + histórico 30 dias)
+    const ini30=new Date(hoje); ini30.setDate(ini30.getDate()-30);
+    const ini30Str=ini30.toISOString().slice(0,10);
+    const diasGraf=[];
+    const recGraf=[];
+    const pagGraf=[];
+    let saldoAcum=0;
+    const saldoGraf=[];
+    for(let i=-30;i<=periodo;i++){
+      const d=new Date(hoje); d.setDate(d.getDate()+i);
+      const ds=d.toISOString().slice(0,10);
+      diasGraf.push(d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}));
+      const entDia=todos.filter(l=>l.tipo==='entrada'&&(l.data_pagamento===ds||(l.status!=='pago'&&l.data_vencimento===ds))).reduce((s,l)=>s+Number(l.valor||0),0);
+      const saiDia=todos.filter(l=>l.tipo==='saida'&&(l.data_pagamento===ds||(l.status!=='pago'&&l.data_vencimento===ds))).reduce((s,l)=>s+Number(l.valor||0),0);
+      recGraf.push(entDia/1000);
+      pagGraf.push(-saiDia/1000);
+      saldoAcum+=entDia-saiDia;
+      saldoGraf.push(saldoAcum/1000);
+    }
+
+    el.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <!-- CONTAS A RECEBER -->
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)">
+          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--red-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠ Vencidos</div>
+            <div style="font-size:18px;font-weight:700;color:var(--red)">${fmt(soma(recVencidos))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${recVencidos.length} lançamento(s)</div>
+          </div>
+          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--amber-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;margin-bottom:4px">⏱ A Receber</div>
+            <div style="font-size:18px;font-weight:700;color:var(--amber)">${fmt(soma(recAReceber))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${recAReceber.length} lançamento(s)</div>
+          </div>
+          <div style="padding:14px 16px;background:var(--green-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✓ Recebidos</div>
+            <div style="font-size:18px;font-weight:700;color:var(--green)">${fmt(soma(recRecebidos))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${recRecebidos.length} lançamento(s)</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+          <button class="btn btn-xs btn-out2 fin-tab-rec active-fin" onclick="switchFinTab(this,'rec','vencidos')" data-target="rec-vencidos">Vencidos</button>
+          <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','areceber')" data-target="rec-areceber">A receber</button>
+          <button class="btn btn-xs btn-out2 fin-tab-rec" onclick="switchFinTab(this,'rec','recebidos')" data-target="rec-recebidos">Recebidos</button>
+        </div>
+        <div id="rec-vencidos" class="fin-panel-rec" style="max-height:280px;overflow-y:auto">${renderLista(recVencidos,'vencido')}</div>
+        <div id="rec-areceber" class="fin-panel-rec" style="max-height:280px;overflow-y:auto;display:none">${renderLista(recAReceber,'areceber')}</div>
+        <div id="rec-recebidos" class="fin-panel-rec" style="max-height:280px;overflow-y:auto;display:none">${renderLista(recRecebidos,'pago')}</div>
+      </div>
+
+      <!-- CONTAS A PAGAR -->
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)">
+          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--red-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠ Vencidos</div>
+            <div style="font-size:18px;font-weight:700;color:var(--red)">${fmt(soma(pagVencidos))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${pagVencidos.length} lançamento(s)</div>
+          </div>
+          <div style="padding:14px 16px;border-right:1px solid var(--border);background:var(--amber-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;margin-bottom:4px">⏱ A Pagar</div>
+            <div style="font-size:18px;font-weight:700;color:var(--amber)">${fmt(soma(pagAPagar))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${pagAPagar.length} lançamento(s)</div>
+          </div>
+          <div style="padding:14px 16px;background:var(--green-bg)">
+            <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✓ Pagos</div>
+            <div style="font-size:18px;font-weight:700;color:var(--green)">${fmt(soma(pagPagos))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${pagPagos.length} lançamento(s)</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+          <button class="btn btn-xs btn-out2 fin-tab-pag active-fin" onclick="switchFinTab(this,'pag','vencidos')" data-target="pag-vencidos">Vencidos</button>
+          <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','apagar')" data-target="pag-apagar">A pagar</button>
+          <button class="btn btn-xs btn-out2 fin-tab-pag" onclick="switchFinTab(this,'pag','pagos')" data-target="pag-pagos">Pagos</button>
+        </div>
+        <div id="pag-vencidos" class="fin-panel-pag" style="max-height:280px;overflow-y:auto">${renderLista(pagVencidos,'vencido')}</div>
+        <div id="pag-apagar" class="fin-panel-pag" style="max-height:280px;overflow-y:auto;display:none">${renderLista(pagAPagar,'apagar')}</div>
+        <div id="pag-pagos" class="fin-panel-pag" style="max-height:280px;overflow-y:auto;display:none">${renderLista(pagPagos,'pago')}</div>
+      </div>
+    </div>
+
+    <!-- FLUXO DE CAIXA -->
+    <div class="card">
+      <div class="card-header">
+        <div><h3>Fluxo de Caixa</h3><div class="card-sub">Últimos 30 dias + próximos ${periodo} dias</div></div>
+      </div>
+      <div class="card-body"><div style="position:relative;height:260px"><canvas id="chart-fluxo"></canvas></div></div>
+    </div>`;
+
+    // Inicializar gráfico
+    if(window._chartFluxo){window._chartFluxo.destroy();}
+    window._chartFluxo=new Chart(document.getElementById('chart-fluxo'),{
+      type:'line',
+      data:{
+        labels:diasGraf,
+        datasets:[
+          {label:'Recebimentos (R$k)',data:recGraf,borderColor:'var(--green)',backgroundColor:'rgba(22,163,74,.08)',fill:true,pointRadius:2,tension:.3,borderWidth:2},
+          {label:'Pagamentos (R$k)',data:pagGraf,borderColor:'var(--red)',backgroundColor:'rgba(220,38,38,.08)',fill:true,pointRadius:2,tension:.3,borderWidth:2},
+          {label:'Saldo acumulado (R$k)',data:saldoGraf,borderColor:'var(--blue)',pointRadius:3,tension:.3,borderWidth:2.5,borderDash:[]}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12}}},
+        scales:{
+          y:{ticks:{callback:v=>v>=0?'R$'+v+'k':'- R$'+Math.abs(v)+'k',font:{size:10}},grid:{color:'#f0f0f0'},border:{display:false}},
+          x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{display:false},border:{display:false}}
+        },
+        interaction:{mode:'index',intersect:false}
+      }
+    });
+
+  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
+}
+
+function switchFinTab(btn, grupo, tab){
+  document.querySelectorAll(`.fin-tab-${grupo}`).forEach(b=>b.classList.remove('active-fin','btn-pri'));
+  document.querySelectorAll(`.fin-panel-${grupo}`).forEach(p=>p.style.display='none');
+  btn.classList.add('active-fin','btn-pri');
+  document.getElementById(`${grupo}-${tab}`).style.display='block';
 }
 
 // ── LANÇAMENTOS ──
@@ -3141,6 +3364,17 @@ async function initApp(){
   document.getElementById('u-email').textContent=u.email;
   document.getElementById('dash-period').textContent=new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   navigate('dashboard');
+  // Verificar atrasos no background para atualizar badge
+  setTimeout(async()=>{
+    try{
+      const hoje_b=new Date().toISOString().slice(0,10);
+      let bq=`select=id&status=eq.previsto&tipo=eq.entrada&data_vencimento=lt.${hoje_b}`;
+      if(FRONT) bq+=`&front=eq.${encodeURIComponent(FRONT)}`;
+      const atrasados=await dbGet('lancamentos',bq);
+      const badge=document.getElementById('badge-atraso');
+      if(badge){badge.textContent=atrasados.length;badge.style.display=atrasados.length>0?'inline':'none';}
+    }catch(e){}
+  },2000);
 }
 
 async function logout(){

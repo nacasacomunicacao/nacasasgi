@@ -689,6 +689,109 @@ function loadSection(sec){
   else if(sec==='relatorios')loadRelatorios();
 }
 
+function loadRelatorios(){
+  const el=document.getElementById('relatorios-content');
+  if(!el) return;
+  el.innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:var(--rlg);background:var(--blue-light);display:flex;align-items:center;justify-content:center;color:var(--blue)"><i class="ti ti-trending-up" style="font-size:20px"></i></div>
+        <div><div style="font-weight:700;font-size:14px">Fluxo de Caixa</div><div style="font-size:12px;color:var(--text-3)">Entradas e saídas do período</div></div>
+      </div>
+      <button class="btn btn-out2" style="width:100%" onclick="exportFluxo()"><i class="ti ti-download"></i> Exportar Excel</button>
+    </div>
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:var(--rlg);background:var(--blue-light);display:flex;align-items:center;justify-content:center;color:var(--blue)"><i class="ti ti-ruler-measure" style="font-size:20px"></i></div>
+        <div><div style="font-weight:700;font-size:14px">Medições e Contratos</div><div style="font-size:12px;color:var(--text-3)">Previsto × realizado por contrato</div></div>
+      </div>
+      <button class="btn btn-out2" style="width:100%" onclick="exportMedicoes()"><i class="ti ti-download"></i> Exportar Excel</button>
+    </div>
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:var(--rlg);background:var(--blue-light);display:flex;align-items:center;justify-content:center;color:var(--blue)"><i class="ti ti-users" style="font-size:20px"></i></div>
+        <div><div style="font-weight:700;font-size:14px">Clientes</div><div style="font-size:12px;color:var(--text-3)">Cadastro completo de clientes</div></div>
+      </div>
+      <button class="btn btn-out2" style="width:100%" onclick="exportClientes()"><i class="ti ti-download"></i> Exportar Excel</button>
+    </div>
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:var(--rlg);background:var(--blue-light);display:flex;align-items:center;justify-content:center;color:var(--blue)"><i class="ti ti-table" style="font-size:20px"></i></div>
+        <div><div style="font-weight:700;font-size:14px">DRE Simplificado</div><div style="font-size:12px;color:var(--text-3)">Resultado mensal do ano atual</div></div>
+      </div>
+      <button class="btn btn-out2" style="width:100%" onclick="exportDRE()"><i class="ti ti-download"></i> Exportar Excel</button>
+    </div>
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:var(--rlg);background:var(--blue-light);display:flex;align-items:center;justify-content:center;color:var(--blue)"><i class="ti ti-filter" style="font-size:20px"></i></div>
+        <div><div style="font-weight:700;font-size:14px">Pipeline Comercial</div><div style="font-size:12px;color:var(--text-3)">Funil de leads com etapas e temperaturas</div></div>
+      </div>
+      <button class="btn btn-out2" style="width:100%" onclick="exportFunil()"><i class="ti ti-download"></i> Exportar Excel</button>
+    </div>
+  </div>`;
+}
+
+async function exportFluxo(){
+  try{
+    const ano=new Date().getFullYear();
+    let q=`select=*,clientes(nome),categorias(nome)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31&order=data_vencimento.asc`;
+    if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
+    const rows=await dbGet('lancamentos',q);
+    xlsxExport(rows.map(r=>({
+      Data:r.data_vencimento||'',
+      'Data pagamento':r.data_pagamento||'',
+      Tipo:r.tipo,
+      Status:r.status,
+      Descrição:r.descricao,
+      Categoria:r.categorias?.nome||'',
+      Cliente:r.clientes?.nome||'',
+      Valor:Number(r.valor||0),
+      Front:r.front,
+      'Forma pagamento':r.forma_pagamento||'',
+      'Pago com atraso':r.pago_com_atraso?'Sim':'Não'
+    })),'fluxo-caixa');
+    notify('Exportado com sucesso!','success');
+  }catch(e){notify('Erro: '+e.message,'error');}
+}
+
+async function exportClientes(){
+  try{
+    const rows=await dbGet('clientes','select=*&order=nome.asc');
+    xlsxExport(rows.map(r=>({
+      Nome:r.nome,
+      Front:r.front,
+      Tipo:r.tipo_pessoa||'',
+      Documento:r.documento||'',
+      Email:r.email||'',
+      Telefone:r.telefone||'',
+      Origem:r.origem||'',
+      Responsável:r.responsavel||'',
+      Status:r.ativo?'Ativo':'Inativo'
+    })),'clientes');
+    notify('Exportado com sucesso!','success');
+  }catch(e){notify('Erro: '+e.message,'error');}
+}
+
+async function exportMedicoes(){
+  try{
+    let q=`select=*,contratos(descricao,clientes(nome))&order=mes_referencia.asc`;
+    if(FRONT) q+=`&contrato.front=eq.${encodeURIComponent(FRONT)}`;
+    const rows=await dbGet('medicoes',q);
+    xlsxExport(rows.map(r=>({
+      Cliente:r.contratos?.clientes?.nome||'',
+      Contrato:r.contratos?.descricao||'',
+      'Mês referência':r.mes_referencia||'',
+      'Valor previsto':Number(r.valor_previsto||0),
+      'Valor medido':Number(r.valor_medido||0),
+      Saldo:Number(r.valor_previsto||0)-Number(r.valor_medido||0),
+      Status:r.status||'pendente',
+      'Data pagamento':r.data_pagamento||''
+    })),'medicoes-contratos');
+    notify('Exportado com sucesso!','success');
+  }catch(e){notify('Erro: '+e.message,'error');}
+}
+
 const fmt=v=>'R$\u00a0'+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
 const fmtDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—';
 const fmtMonth=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{month:'short',year:'numeric'}):'—';
@@ -2442,6 +2545,174 @@ async function deleteMeta(id){
   if(!confirm('Excluir esta meta?'))return;
   try{await dbDelete('metas_mensais',id);notify('Meta excluída','info');loadMetas();}
   catch(e){notify('Erro: '+e.message,'error');}
+}
+
+// ── ANÁLISE ──
+async function loadAnalise(){
+  const el=document.getElementById('analise-content');
+  if(!el) return;
+  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
+  try{
+    const ano=new Date().getFullYear();
+
+    // Buscar lançamentos pagos do ano
+    let qe=`select=*,clientes(nome),categorias(nome)&tipo=eq.entrada&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
+    let qs=`select=*&tipo=eq.saida&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
+    if(FRONT){qe+=`&front=eq.${encodeURIComponent(FRONT)}`;qs+=`&front=eq.${encodeURIComponent(FRONT)}`;}
+    const [entradas,saidas,contratos]=await Promise.all([
+      dbGet('lancamentos',qe),
+      dbGet('lancamentos',qs),
+      dbGet('contratos',`select=id,descricao,valor_total,front,status,clientes(nome)${FRONT?'&front=eq.'+encodeURIComponent(FRONT):''}`)
+    ]);
+
+    const fronts=['Nacasa Comunicação','Nacasa Educação'];
+    const totalRec=entradas.reduce((s,l)=>s+Number(l.valor),0);
+
+    // ── RENTABILIDADE POR FRONT ──
+    const rentab=fronts.map(f=>({
+      front:f,
+      receita:entradas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
+      despesa:saidas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
+    })).map(f=>({...f,margem:f.receita-f.despesa,pct:f.receita>0?Math.round(((f.receita-f.despesa)/f.receita)*100):0}));
+
+    // ── CONCENTRAÇÃO POR CLIENTE ──
+    const porCliente={};
+    entradas.forEach(l=>{
+      const nome=l.clientes?l.clientes.nome:'Sem cliente';
+      porCliente[nome]=(porCliente[nome]||0)+Number(l.valor);
+    });
+    const rankingCli=Object.entries(porCliente).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>({
+      nome,val,pct:totalRec>0?Math.round((val/totalRec)*100):0
+    }));
+    const riscoAlert=rankingCli.filter(r=>r.pct>30);
+
+    // ── CURVA ABC — CONTRATOS ──
+    const ctsAtivos=contratos.filter(ct=>ct.status==='ativo'||ct.status==='encerrado').sort((a,b)=>Number(b.valor_total)-Number(a.valor_total));
+    const totalCts=ctsAtivos.reduce((s,ct)=>s+Number(ct.valor_total),0);
+    let acumCts=0;
+    const abcCts=ctsAtivos.map(ct=>{
+      acumCts+=Number(ct.valor_total);
+      const pct=totalCts>0?Math.round((Number(ct.valor_total)/totalCts)*100):0;
+      const acumPct=totalCts>0?Math.round((acumCts/totalCts)*100):0;
+      return {...ct,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
+    });
+
+    // ── CURVA ABC — PRODUTOS (por categoria) ──
+    const prodMap={};
+    entradas.forEach(l=>{
+      const p=l.categorias?.nome||'Sem categoria';
+      prodMap[p]=(prodMap[p]||0)+Number(l.valor);
+    });
+    const totalProd=Object.values(prodMap).reduce((a,b)=>a+b,0);
+    let acumProd=0;
+    const abcProd=Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>{
+      acumProd+=val;
+      const pct=totalProd>0?Math.round((val/totalProd)*100):0;
+      const acumPct=totalProd>0?Math.round((acumProd/totalProd)*100):0;
+      return {nome,val,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
+    });
+
+    const abcBadge=cls=>({
+      A:'<span class="badge badge-green">Classe A</span>',
+      B:'<span class="badge badge-amber">Classe B</span>',
+      C:'<span class="badge badge-gray">Classe C</span>'
+    }[cls]);
+
+    const abcBar=(pct,cls)=>`<div style="display:flex;align-items:center;gap:6px">
+      <div style="width:80px;height:5px;background:var(--border);border-radius:2px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${cls==='A'?'var(--green)':cls==='B'?'var(--gold)':'var(--text-3)'};border-radius:2px"></div>
+      </div>
+      <span style="font-size:11px">${pct}%</span>
+    </div>`;
+
+    el.innerHTML=`
+    ${riscoAlert.length>0?`
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--rlg);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <i class="ti ti-alert-triangle" style="font-size:20px;color:var(--red);flex-shrink:0"></i>
+      <div>
+        <div style="font-weight:600;color:var(--red);font-size:13px">Concentração de risco elevada</div>
+        <div style="font-size:12px;color:#b91c1c;margin-top:2px">${riscoAlert.map(r=>`<strong>${r.nome}</strong> representa ${r.pct}% da receita`).join(' · ')}</div>
+      </div>
+    </div>`:''}
+
+    <!-- RENTABILIDADE + CONCENTRAÇÃO -->
+    <div class="cgrid" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-header"><div><h3>Rentabilidade por front</h3><div class="card-sub">${ano} — receitas e despesas pagas</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Front</th><th>Receita</th><th>Despesa</th><th>Margem</th><th>Margem %</th></tr></thead>
+          <tbody>${rentab.map(f=>`<tr>
+            <td>${frontTag(f.front)}</td>
+            <td class="td-mono" style="color:var(--green)"><strong>${fmt(f.receita)}</strong></td>
+            <td class="td-mono" style="color:var(--red)">${fmt(f.despesa)}</td>
+            <td class="td-mono"><strong>${fmt(f.margem)}</strong></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                  <div style="width:${Math.max(0,f.pct)}%;height:100%;background:${f.pct>=50?'var(--green)':f.pct>=30?'var(--gold)':'var(--red)'};border-radius:3px"></div>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:${f.pct>=50?'var(--green)':f.pct>=30?'var(--amber)':'var(--red)'}">${f.pct}%</span>
+              </div>
+            </td>
+          </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h3>Concentração por cliente</h3><div class="card-sub">% da receita total — alerta acima de 30%</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Cliente</th><th>Receita</th><th>Concentração</th><th>Risco</th></tr></thead>
+          <tbody>${rankingCli.map(r=>`<tr>
+            <td class="tpri">${r.nome}</td>
+            <td class="td-mono"><strong>${fmt(r.val)}</strong></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                  <div style="width:${r.pct}%;height:100%;background:${r.pct>30?'var(--red)':r.pct>15?'var(--gold)':'var(--green)'};border-radius:3px"></div>
+                </div>
+                <span style="font-size:12px;font-weight:700;color:${r.pct>30?'var(--red)':r.pct>15?'var(--amber)':'var(--green)'}">${r.pct}%</span>
+              </div>
+            </td>
+            <td>${r.pct>30?'<span class="badge badge-red badge-dot">Risco alto</span>':r.pct>15?'<span class="badge badge-amber badge-dot">Atenção</span>':'<span class="badge badge-green badge-dot">Saudável</span>'}</td>
+          </tr>`).join('')||'<tr><td colspan="4"><div class="empty" style="padding:20px"><p>Sem dados</p></div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- CURVA ABC -->
+    <div class="cgrid">
+      <div class="card">
+        <div class="card-header"><div><h3>Curva ABC — Contratos</h3><div class="card-sub">Por valor total contratado</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Cliente / Contrato</th><th>Valor</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
+          <tbody>${abcCts.map(ct=>`<tr>
+            <td><div class="tpri">${ct.clientes?ct.clientes.nome:'—'}</div><div style="font-size:11px;color:var(--text-3)">${ct.descricao}</div></td>
+            <td class="td-mono">${fmt(ct.valor_total)}</td>
+            <td class="td-mono">${ct.pct}%</td>
+            <td>${abcBar(ct.acumPct,ct.cls)}</td>
+            <td>${abcBadge(ct.cls)}</td>
+          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem contratos</p></div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h3>Curva ABC — Produtos</h3><div class="card-sub">Por receita realizada (pagos em ${ano})</div></div></div>
+        <div class="tw"><table>
+          <thead><tr><th>Produto / Categoria</th><th>Receita</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
+          <tbody>${abcProd.map(p=>`<tr>
+            <td class="tpri">${p.nome}</td>
+            <td class="td-mono">${fmt(p.val)}</td>
+            <td class="td-mono">${p.pct}%</td>
+            <td>${abcBar(p.acumPct,p.cls)}</td>
+            <td>${abcBadge(p.cls)}</td>
+          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem lançamentos pagos</p></div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+    </div>`;
+
+  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 
 // ── FUNIL COMERCIAL ──

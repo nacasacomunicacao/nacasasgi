@@ -932,8 +932,41 @@ async function loadDashboard(){
     const defOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`R$ ${c.raw}k`}}},scales:{y:{grid:{color:'#F3F2EF'},ticks:{color:'#9CA3AF',font:{size:11},callback:v=>'R$'+v+'k'},border:{display:false}},x:{grid:{display:false},ticks:{color:'#9CA3AF',font:{size:11}},border:{display:false}}}};
     chartBar=new Chart(document.getElementById('chart-bar'),{type:'bar',data:{labels:meses,datasets:[{label:'Meta',data:prevM,backgroundColor:'rgba(43,63,212,.15)',borderRadius:3},{label:'Realizado',data:realM,backgroundColor:'#2B3FD4',borderRadius:3}]},options:{...defOpts,barPercentage:.65,categoryPercentage:.75}});
     chartLine=new Chart(document.getElementById('chart-line'),{type:'line',data:{labels:meses,datasets:[{label:'Meta',data:prevA,borderColor:'rgba(43,63,212,.2)',borderDash:[5,4],pointRadius:0,tension:.35,borderWidth:1.5},{label:'Realizado',data:realA,borderColor:'#D4960A',pointRadius:3,pointBackgroundColor:'#D4960A',tension:.35,borderWidth:2}]},options:defOpts});
-  // ── ALERTA LEADS QUENTES ──
-  checkLeadsParados();
+  // ── ALERTA LEADS QUENTES PARADOS (+7 dias) ──
+  try{
+    const sete_atras=new Date(now); sete_atras.setDate(sete_atras.getDate()-7);
+    let lhQ=`select=*&temperatura=eq.Quente&etapa=not.in.(Fechado,Perdido)&criado_em=lte.${sete_atras.toISOString().slice(0,10)}T00:00:00`;
+    if(FRONT) lhQ+=`&front=eq.${encodeURIComponent(FRONT)}`;
+    const leadsHot=await dbGet('leads',lhQ);
+    if(leadsHot.length>0){
+      const lhRows=leadsHot.map(l=>{
+        const diasParado=Math.round((now-new Date(l.criado_em))/(1000*60*60*24));
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <i class="ti ti-flame" style="color:var(--red);font-size:18px"></i>
+            <div>
+              <div style="font-weight:600;font-size:13px;color:var(--blue)">${l.nome}</div>
+              <div style="font-size:11px;color:var(--text-3)">${l.etapa} · ${l.produto||'—'}</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <span class="badge badge-red">${diasParado}d parado</span>
+            <div style="font-size:11px;color:var(--text-3);margin-top:3px">${fmt(l.valor_potencial||0)}</div>
+          </div>
+        </div>`;
+      }).join('');
+      dashEl.insertAdjacentHTML('beforeend',`
+      <div class="card" style="margin-bottom:16px;border-top:3px solid var(--red)">
+        <div class="card-header">
+          <div><h3><i class="ti ti-flame" style="color:var(--red);margin-right:6px"></i>Leads quentes parados</h3>
+            <div class="card-sub">${leadsHot.length} lead(s) quente(s) sem atualização há mais de 7 dias</div>
+          </div>
+          <button class="btn btn-out2 btn-sm" onclick="navigate('funil')"><i class="ti ti-filter"></i>Ver funil</button>
+        </div>
+        <div style="padding:0 18px">${lhRows}</div>
+      </div>`);
+    }
+  }catch(e2){console.warn('Leads quentes:',e2.message);}
 
   // ── AGENDA DE RECEBIMENTOS (30 dias) ──
   const hoje = new Date();
@@ -2364,7 +2397,7 @@ async function openLancamentoModal(l){
         <div><label>Front *</label><select id="lc-front"><option value="Nacasa Comunicação" ${!l||l.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${l&&l.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
       </div>
       <div class="form-row">
-        <div><label>Categoria</label><select id="lc-cat"><option value="">Sem categoria</option>${cats.map(c=>`<option value="${c.id}" ${l&&l.categoria_id===c.id?'selected':''}>[${c.tipo}] ${c.nome}</option>`).join('')}</select></div>
+        <div><label>Categoria</label><select id="lc-cat"><option value="" disabled selected>Selecionar categoria *</option>${cats.map(c=>`<option value="${c.id}" ${l&&l.categoria_id===c.id?'selected':''}>[${c.tipo}] ${c.nome}</option>`).join('')}</select></div>
         <div><label>Status *</label><select id="lc-status">${['previsto','pago','atrasado','cancelado'].map(s=>`<option value="${s}" ${l&&l.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="form-section">Dados financeiros</div>

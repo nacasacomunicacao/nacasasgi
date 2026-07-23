@@ -3022,144 +3022,21 @@ async function loadCategorias(){
   const el=document.getElementById('categorias-content');
   el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
-    const rows=await dbGet('categorias','select=*&order=tipo.asc,nome.asc');
-    const entradas=rows.filter(r=>r.tipo==='entrada');
-    const saidas=rows.filter(r=>r.tipo==='saida');
-    const buildRows=arr=>arr.length?arr.map(r=>`<tr>
-      <td class="tpri">${r.nome}</td>
-      <td><span class="badge ${r.tipo==='entrada'?'badge-green':'badge-red'} badge-dot">${r.tipo}</span></td>
-      <td>${r.ativa?'<span class="badge badge-green badge-dot">Ativa</span>':'<span class="badge badge-gray badge-dot">Inativa</span>'}</td>
-      <td><div class="td-actions">
-        <button class="btn btn-out2 btn-sm" onclick="openCategoriaModal(${JSON.stringify(r).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i> Editar</button>
-        <button class="btn btn-del btn-sm" onclick="toggleCategoria('${r.id}',${r.ativa})"><i class="ti ti-${r.ativa?'eye-off':'eye'}"></i></button>
-      </div></td>
-    </tr>`).join(''):`<tr><td colspan="4"><div class="empty" style="padding:24px"><p>Nenhuma categoria</p></div></td></tr>`;
-
-    el.innerHTML=`
-    <div class="cgrid">
-      <div class="card"><div class="card-header"><h3><i class="ti ti-arrow-down-circle" style="color:var(--green);margin-right:6px"></i>Entradas (${entradas.length})</h3></div>
-        <div class="tw"><table><thead><tr><th>Nome</th><th>Tipo</th><th>Status</th><th style="width:140px"></th></tr></thead>
-        <tbody>${buildRows(entradas)}</tbody></table></div></div>
-      <div class="card"><div class="card-header"><h3><i class="ti ti-arrow-up-circle" style="color:var(--red);margin-right:6px"></i>Saídas (${saidas.length})</h3></div>
-        <div class="tw"><table><thead><tr><th>Nome</th><th>Tipo</th><th>Status</th><th style="width:140px"></th></tr></thead>
-        <tbody>${buildRows(saidas)}</tbody></table></div></div>
-    </div>`;
-  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
-}
-
-function openCategoriaModal(cat){
-  openModal(`<div class="modal">
-    <div class="mh"><h3>${cat?'Editar categoria':'Nova categoria'}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
-    <div class="mb"><div class="fg">
-      <div><label>Nome *</label><input id="cat-nome" value="${cat?cat.nome:''}" placeholder="Ex: Mentoria individual"></div>
-      <div><label>Tipo *</label><select id="cat-tipo">
-        <option value="entrada" ${!cat||cat.tipo==='entrada'?'selected':''}>Entrada</option>
-        <option value="saida" ${cat&&cat.tipo==='saida'?'selected':''}>Saída</option>
-      </select></div>
-    </div></div>
-    <div class="mf">
-      <button class="btn btn-out2" onclick="closeModalForce()">Cancelar</button>
-      <button class="btn btn-pri" onclick="saveCategoria(${cat?`'${cat.id}'`:'null'})"><i class="ti ti-check"></i> Salvar</button>
-    </div>
-  </div>`);
-}
-
-async function saveCategoria(id){
-  const tipo=document.getElementById('cat-tipo').value;
-  const tipoContabil=tipo==='entrada'?'receita_operacional':(document.getElementById('cat-contabil')?.value||'despesa_operacional');
-  const data={
-    nome:document.getElementById('cat-nome').value.trim(),
-    tipo,
-    tipo_contabil:tipoContabil,
-    ativa:true
-  };
-  if(!data.nome){notify('Nome é obrigatório','error');return;}
-  try{
-    id?await dbUpdate('categorias',id,data):await dbInsert('categorias',data);
-    closeModalForce();notify(id?'Categoria atualizada':'Categoria criada','success');loadCategorias();
-  }catch(e){notify('Erro: '+e.message,'error');}
-}
-
-async function toggleCategoria(id,ativa){
-  try{
-    await dbUpdate('categorias',id,{ativa:!ativa});
-    notify(ativa?'Categoria desativada':'Categoria reativada','info');loadCategorias();
-  }catch(e){notify('Erro: '+e.message,'error');}
-}
-
-// ── HISTÓRICO DE LEADS ──
-async function loadLeadHistorico(leadId, elOrNome){
-  const leadNome = typeof elOrNome === 'string' ? elOrNome : (elOrNome.dataset.nome || 'Lead');
-  openModal(`<div class="modal">
-    <div class="mh"><h3>Histórico — ${leadNome}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
-    <div class="mb" id="hist-body"><div class="loading"><div class="spin"></div>Carregando...</div></div>
-  </div>`);
-  try{
-    const rows=await dbGet('leads_historico',`select=*&lead_id=eq.${leadId}&order=criado_em.desc`);
-    const histHtml=rows.length?rows.map(h=>`
-      <div class="hist-item">
-        <div class="hist-dot"></div>
-        <div class="hist-body">
-          <div class="hist-title">
-            ${h.etapa_anterior?`<span style="color:var(--text-3)">${h.etapa_anterior}</span> <i class="ti ti-arrow-right" style="font-size:11px"></i> `:''}
-            <strong>${h.etapa_nova}</strong>
-            ${h.temperatura_nova&&h.temperatura_nova!==h.temperatura_anterior?` · <span style="color:${h.temperatura_nova==='Quente'?'var(--red)':h.temperatura_nova==='Morno'?'var(--amber)':'var(--text-3)'}">${h.temperatura_nova}</span>`:''}
-          </div>
-          ${h.observacao?`<div style="font-size:12px;color:var(--text-2);margin-top:3px">${h.observacao}</div>`:''}
-          <div class="hist-time">${h.registrado_por||'Sistema'} · ${new Date(h.criado_em).toLocaleString('pt-BR')}</div>
-        </div>
-      </div>`).join('')
-    :`<div class="empty" style="padding:32px"><i class="ti ti-history"></i><div class="et">Sem histórico</div><p>As mudanças de etapa aparecerão aqui.</p></div>`;
-    document.getElementById('hist-body').innerHTML=histHtml;
-  }catch(e){document.getElementById('hist-body').innerHTML=`<p style="color:var(--red);padding:16px">Erro: ${e.message}</p>`;}
-}
-
-async function registrarHistorico(leadId, etapaAnt, etapaNova, tempAnt, tempNova, obs){
-  if(etapaAnt===etapaNova && tempAnt===tempNova) return;
-  try{
-    await dbInsert('leads_historico',{
-      lead_id:leadId, etapa_anterior:etapaAnt, etapa_nova:etapaNova,
-      temperatura_anterior:tempAnt, temperatura_nova:tempNova,
-      observacao:obs||null, registrado_por:SESSION?.user?.email||'Sistema'
-    });
-  }catch(e){console.warn('Histórico não registrado:',e.message);}
-}
-
-// ── ALERTA LEADS QUENTES PARADOS ──
-async function checkLeadsParados(){
-  try{
-    const limite = new Date(); limite.setDate(limite.getDate()-7);
-    const limiteStr = limite.toISOString().slice(0,10);
-    let q=`select=id,nome,etapa,temperatura,criado_em&temperatura=eq.Quente&etapa=not.in.(Fechado,Perdido)&criado_em=lte.${limiteStr}`;
-    if(FRONT) q+=`&front=eq.${encodeURIComponent(FRONT)}`;
-    const parados = await dbGet('leads',q);
-    if(parados.length===0) return;
-    const dashEl = document.getElementById('dash-content');
-    if(!dashEl) return;
-    const alertHtml=`
-    <div id="alerta-leads" style="background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--rlg);padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
-      <i class="ti ti-flame" style="font-size:20px;color:var(--red);flex-shrink:0;margin-top:2px"></i>
-      <div style="flex:1">
-        <div style="font-weight:600;color:var(--red);font-size:13px">${parados.length} lead${parados.length>1?'s quentes parados':' quente parado'} há mais de 7 dias</div>
-        <div style="font-size:12px;color:var(--red);margin-top:4px">${parados.map(l=>`<strong>${l.nome}</strong> (${l.etapa})`).join(' · ')}</div>
-      </div>
-      <button onclick="navigate('funil');document.getElementById('fl-temp').value='Quente';applyFunilFilter()" 
-        style="background:var(--red);color:#fff;border:none;border-radius:var(--r);padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">
-        Ver leads
-      </button>
-    </div>`;
-    dashEl.insertAdjacentHTML('afterbegin', alertHtml);
-  }catch(e){console.warn('checkLeadsParados:',e.message);}
-}
-
-// ── CATEGORIAS ──
-async function loadCategorias(){
-  const el=document.getElementById('categorias-content');
-  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
-  try{
     const cats=await dbGet('categorias','select=*&order=tipo.asc,tipo_contabil.asc,nome.asc');
-    const entrada=cats.filter(c=>c.tipo==='entrada');
-    const saida=cats.filter(c=>c.tipo==='saida');
+    const entradas=cats.filter(c=>c.tipo==='entrada');
+    const saidas=cats.filter(c=>c.tipo==='saida');
+    const tcLabel={
+      'receita_operacional':'Receita operacional',
+      'imposto_receita':'Imposto s/ receita',
+      'despesa_operacional':'Despesa operacional',
+      'imposto_lucro':'Imposto s/ lucro'
+    };
+    const tcCor={
+      'receita_operacional':'badge-green',
+      'imposto_receita':'badge-amber',
+      'despesa_operacional':'badge-gray',
+      'imposto_lucro':'badge-red'
+    };
     const renderGrupo=(lista,tipo)=>`
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
@@ -3169,12 +3046,15 @@ async function loadCategorias(){
           </h3>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>Nome</th><th>Classificação contábil</th><th>Status</th><th style="width:90px"></th></tr></thead>
-          <tbody>${lista.map(cat=>{
-            const tcLabel={'receita_operacional':'Receita operacional','imposto_receita':'Imposto s/ receita','despesa_operacional':'Despesa operacional','imposto_lucro':'Imposto s/ lucro'};
-            return `<tr>
+          <thead><tr>
+            <th>Nome</th>
+            <th>Classificação contábil</th>
+            <th>Status</th>
+            <th style="width:100px"></th>
+          </tr></thead>
+          <tbody>${lista.length?lista.map(cat=>`<tr>
             <td class="tpri">${cat.nome}</td>
-            <td><span class="badge badge-gray" style="font-size:10px">${tcLabel[cat.tipo_contabil]||'—'}</span></td>
+            <td><span class="badge ${tcCor[cat.tipo_contabil]||'badge-gray'}" style="font-size:10px">${tcLabel[cat.tipo_contabil]||'—'}</span></td>
             <td>${cat.ativa?'<span class="badge badge-green badge-dot">Ativa</span>':'<span class="badge badge-gray badge-dot">Inativa</span>'}</td>
             <td><div class="td-actions">
               <button class="btn btn-out2 btn-sm" onclick="openCategoriaModal(${JSON.stringify(cat).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
@@ -3182,16 +3062,17 @@ async function loadCategorias(){
                 <i class="ti ${cat.ativa?'ti-eye-off':'ti-eye'}"></i>
               </button>
             </div></td>
-          </tr>`;}).join('')||'<tr><td colspan="3"><div class="empty" style="padding:20px"><p>Nenhuma categoria</p></div></td></tr>'}
+          </tr>`).join(''):`<tr><td colspan="4"><div class="empty" style="padding:20px"><p>Nenhuma categoria</p></div></td></tr>`}
           </tbody>
         </table></div>
       </div>`;
-    el.innerHTML=`<div class="cgrid">${renderGrupo(entrada,'entrada')}${renderGrupo(saida,'saida')}</div>`;
+    el.innerHTML=`<div class="cgrid">${renderGrupo(entradas,'entrada')}${renderGrupo(saidas,'saida')}</div>`;
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 
+
 function openCategoriaModal(cat){
-  const isSaida = cat&&cat.tipo==='saida';
+  const isSaida=cat&&cat.tipo==='saida';
   openModal(`<div class="modal">
     <div class="mh"><h3>${cat?'Editar categoria':'Nova categoria'}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
     <div class="mb"><div class="fg">
@@ -3216,6 +3097,13 @@ function openCategoriaModal(cat){
     </div>
   </div>`);
 }
+
+function onCatTipoChange(){
+  const tipo=document.getElementById('cat-tipo')?.value;
+  const wrap=document.getElementById('cat-contabil-wrap');
+  if(wrap) wrap.style.display=tipo==='saida'?'':'none';
+}
+
 
 function onCatTipoChange(){
   const tipo=document.getElementById('cat-tipo')?.value;

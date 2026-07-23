@@ -2987,338 +2987,190 @@ async function loadDRE(){
   if(!el) return;
   el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
-    const ano=document.getElementById('dre-ano')?.value||new Date().getFullYear();
+    const ano=parseInt(document.getElementById('dre-ano')?.value||new Date().getFullYear());
     const comparar=document.getElementById('dre-comparar')?.value||'';
-    const anoAnt = String(Number(ano)-1);
-    let qe=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
+    const anoAnt=ano-1;
+
+    // Buscar lançamentos do período atual
+    let qe=`select=*,categorias(nome),clientes(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
     let qs=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
     if(FRONT){qe+=`&front=eq.${encodeURIComponent(FRONT)}`;qs+=`&front=eq.${encodeURIComponent(FRONT)}`;}
     const [entradas,saidas]=await Promise.all([dbGet('lancamentos',qe),dbGet('lancamentos',qs)]);
 
-    // Lançamentos do período anterior (para comparativo)
+    // Período anterior para comparativo
     let entAnt=[], saiAnt=[];
     if(comparar){
-      let qeA,qsA;
-      if(comparar==='ant'){
-        qeA=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
-        qsA=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
-      } else {
-        // semestre anterior ao semestre atual
-        const mesAtualDRE=new Date().getMonth();
-        const semAtual=mesAtualDRE<6?0:1;
-        const semAntIni=semAtual===0?`${anoAnt}-07-01`:`${ano}-01-01`;
-        const semAntFim=semAtual===0?`${anoAnt}-12-31`:`${ano}-06-30`;
-        qeA=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${semAntIni}&data_vencimento=lte.${semAntFim}`;
-        qsA=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${semAntIni}&data_vencimento=lte.${semAntFim}`;
-      }
+      let qeA=`select=*,categorias(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
+      let qsA=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${anoAnt}-01-01&data_vencimento=lte.${anoAnt}-12-31`;
       if(FRONT){qeA+=`&front=eq.${encodeURIComponent(FRONT)}`;qsA+=`&front=eq.${encodeURIComponent(FRONT)}`;}
       [entAnt,saiAnt]=await Promise.all([dbGet('lancamentos',qeA),dbGet('lancamentos',qsA)]);
     }
 
-    const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    // Totais
+    const recBruta  = entradas.reduce((s,l)=>s+Number(l.valor||0),0);
+    const despTotal  = saidas.reduce((s,l)=>s+Number(l.valor||0),0);
+    const resultado  = recBruta - despTotal;
+    const margem     = recBruta>0?((resultado/recBruta)*100):0;
+    const recBrutaAnt= entAnt.reduce((s,l)=>s+Number(l.valor||0),0);
+    const despAnt    = saiAnt.reduce((s,l)=>s+Number(l.valor||0),0);
+    const resultAnt  = recBrutaAnt - despAnt;
+    const crescRec   = recBrutaAnt>0?((recBruta-recBrutaAnt)/recBrutaAnt*100):null;
+    const margemAnt  = recBrutaAnt>0?((resultAnt/recBrutaAnt)*100):null;
 
-    // Agrupar por categoria e mês
-    const catEntrada={}, catSaida={};
-    entradas.forEach(l=>{
-      const cat=l.categorias?.nome||'Sem categoria';
-      const mes=new Date(l.data_vencimento+'T12:00:00').getMonth();
-      if(!catEntrada[cat])catEntrada[cat]=Array(12).fill(0);
-      catEntrada[cat][mes]+=Number(l.valor);
+    // Agrupamento por categoria
+    const porCat=(arr)=>{
+      const m={};
+      arr.forEach(l=>{const k=l.categorias?.nome||'Sem categoria'; m[k]=(m[k]||0)+Number(l.valor||0);});
+      return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+    };
+    const catEnt = porCat(entradas);
+    const catSai = porCat(saidas);
+
+    // Clientes únicos com receita
+    const clientesComRec=new Set(entradas.filter(l=>l.clientes).map(l=>l.clientes.nome));
+    const recMediaCliente=clientesComRec.size>0?recBruta/clientesComRec.size:0;
+
+    // % recorrente (lançamentos com contrato vinculado)
+    const recRecorrente=entradas.filter(l=>l.contrato_id).reduce((s,l)=>s+Number(l.valor||0),0);
+    const pctRecorrente=recBruta>0?Math.round((recRecorrente/recBruta)*100):0;
+
+    // Tabela mensal
+    const mesesNomes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const dadosMeses=mesesNomes.map((_,m)=>{
+      const ms=`${ano}-${String(m+1).padStart(2,'0')}`;
+      const ent=entradas.filter(l=>l.data_vencimento?.startsWith(ms)).reduce((s,l)=>s+Number(l.valor||0),0);
+      const sai=saidas.filter(l=>l.data_vencimento?.startsWith(ms)).reduce((s,l)=>s+Number(l.valor||0),0);
+      return {mes:mesesNomes[m],ent,sai,res:ent-sai,mg:ent>0?Math.round(((ent-sai)/ent)*100):null};
     });
-    saidas.forEach(l=>{
-      const cat=l.categorias?.nome||'Sem categoria';
-      const mes=new Date(l.data_vencimento+'T12:00:00').getMonth();
-      if(!catSaida[cat])catSaida[cat]=Array(12).fill(0);
-      catSaida[cat][mes]+=Number(l.valor);
-    });
 
-    const totEntMes=Array(12).fill(0), totSaiMes=Array(12).fill(0);
-    Object.values(catEntrada).forEach(arr=>arr.forEach((v,i)=>totEntMes[i]+=v));
-    Object.values(catSaida).forEach(arr=>arr.forEach((v,i)=>totSaiMes[i]+=v));
-    const resultMes=totEntMes.map((v,i)=>v-totSaiMes[i]);
-
-    // Totais por categoria do período anterior
-    const catEntAnt={},catSaiAnt={};
-    entAnt.forEach(l=>{const cat=l.categorias?.nome||'Sem categoria';catEntAnt[cat]=(catEntAnt[cat]||0)+Number(l.valor);});
-    saiAnt.forEach(l=>{const cat=l.categorias?.nome||'Sem categoria';catSaiAnt[cat]=(catSaiAnt[cat]||0)+Number(l.valor);});
-
-    const renderLinhas=(obj,cor,objAnt)=>Object.entries(obj).map(([cat,vals])=>{
-      const total=vals.reduce((a,b)=>a+b,0);
-      const totalAnt=objAnt?objAnt[cat]||0:0;
-      const pct=comparar&&totalAnt>0?Math.round(((total-totalAnt)/totalAnt)*100):null;
-      const deltaStr=(()=>{
-        if(pct===null) return '';
-        const dc=pct>=0?'var(--green)':'var(--red)';
-        return `<span style="font-size:10px;color:${dc};margin-left:4px">${pct>=0?'+':''}${pct}%</span>`;
-      })();
-      return `<tr style="font-size:12px">
-        <td style="padding-left:24px;color:var(--text-2)">${cat}</td>
-        ${vals.map(v=>`<td class="td-mono" style="color:${cor};text-align:right">${v>0?fmt(v):'—'}</td>`).join('')}
-        <td class="td-mono" style="color:${cor};text-align:right;font-weight:700">${fmt(total)}${deltaStr}</td>
-      </tr>`;}).join('');
-
-    // Calcular totais período anterior para comparativo
-    const totEntAnt = entAnt.reduce((s,l)=>s+Number(l.valor||0),0);
-    const totSaiAnt = saiAnt.reduce((s,l)=>s+Number(l.valor||0),0);
-    const resultAnt = totEntAnt - totSaiAnt;
-    const totEntAtual = entradas.reduce((s,l)=>s+Number(l.valor||0),0);
-    const totSaiAtual = saidas.reduce((s,l)=>s+Number(l.valor||0),0);
-    const resultAtual = totEntAtual - totSaiAtual;
-
-    const delta=(atual,ant)=>{
-      if(!comparar||!ant) return '';
-      const pct=ant>0?Math.round(((atual-ant)/ant)*100):null;
-      if(pct===null) return '';
-      const cor=pct>=0?'var(--green)':'var(--red)';
-      return `<span style="font-size:10px;color:${cor};margin-left:6px">${pct>=0?'+':''}${pct}%</span>`;
+    // Renderizar linha DRE com barra
+    const dreRow=(label, valor, total, cor, indent=0, bold=false, isTotal=false)=>{
+      const pct=total>0?Math.min(Math.abs(valor)/total*100,100):0;
+      const corBarra=cor==='green'?'var(--green)':cor==='red'?'var(--red)':'var(--blue)';
+      const bg=isTotal?'background:var(--blue-light);border-radius:6px;':'';
+      return `<div style="display:flex;align-items:center;gap:12px;padding:${isTotal?'10px 12px':'7px 12px'};margin-bottom:2px;${bg}${indent?'padding-left:'+((indent*16)+12)+'px':''}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:${bold||isTotal?'13px':'12px'};font-weight:${bold||isTotal?700:400};color:var(--${isTotal?'blue':'navy'})">${label}</div>
+          ${pct>0?`<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${corBarra};border-radius:2px"></div>
+          </div>`:''}
+        </div>
+        <div style="font-size:${bold||isTotal?'14px':'12px'};font-weight:${bold||isTotal?700:500};color:var(--${isTotal?'blue':cor==='green'?'green':cor==='red'?'red':'navy'});white-space:nowrap;min-width:110px;text-align:right">
+          ${fmt(Math.abs(valor))}
+        </div>
+        ${comparar&&recBrutaAnt>0?`<div style="font-size:11px;min-width:50px;text-align:right;color:var(--text-3)">
+          ${valor>0&&total>0?'<span style="color:var(--text-3)">'+Math.round((Math.abs(valor)/recBruta)*100)+'%</span>':''}
+        </div>`:''}
+      </div>`;
     };
 
-    el.innerHTML=`
-    ${comparar?`<div style="padding:12px 16px;background:var(--blue-light);border-radius:var(--rlg);margin-bottom:12px;display:flex;gap:24px;font-size:12px">
-      <span><strong>Período atual:</strong> Receita ${fmt(totEntAtual)} · Despesa ${fmt(totSaiAtual)} · Resultado ${fmt(resultAtual)}</span>
-      <span style="color:var(--text-3)">|</span>
-      <span><strong>Período anterior:</strong> Receita ${fmt(totEntAnt)} · Despesa ${fmt(totSaiAnt)} · Resultado ${fmt(resultAnt)}</span>
-      <span>${delta(resultAtual,resultAnt)} vs período anterior</span>
-    </div>`:''}
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
-      <thead>
-        <tr style="background:var(--blue);color:#fff">
-          <th style="padding:10px 14px;text-align:left;white-space:nowrap">Descrição</th>
-          ${meses.map(m=>`<th style="padding:10px 8px;text-align:right;white-space:nowrap">${m}</th>`).join('')}
-          <th style="padding:10px 14px;text-align:right">Total${comparar?' vs anterior':''}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="background:var(--green-bg)">
-          <td style="padding:8px 14px;font-weight:700;color:var(--green)">RECEITAS</td>
-          ${totEntMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(v)}</td>`).join('')}
-          <td class="td-mono" style="text-align:right;font-weight:700;color:var(--green)">${fmt(totEntMes.reduce((a,b)=>a+b,0))}</td>
-        </tr>
-        ${renderLinhas(catEntrada,'var(--green)',catEntAnt)}
-        <tr style="background:var(--red-bg)">
-          <td style="padding:8px 14px;font-weight:700;color:var(--red)">DESPESAS</td>
-          ${totSaiMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(v)}</td>`).join('')}
-          <td class="td-mono" style="text-align:right;font-weight:700;color:var(--red)">${fmt(totSaiMes.reduce((a,b)=>a+b,0))}</td>
-        </tr>
-        ${renderLinhas(catSaida,'var(--red)',catSaiAnt)}
-        <tr style="background:var(--blue-light);border-top:2px solid var(--blue)">
-          <td style="padding:10px 14px;font-weight:700;color:var(--blue)">RESULTADO</td>
-          ${resultMes.map(v=>`<td class="td-mono" style="text-align:right;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'}">${fmt(v)}</td>`).join('')}
-          <td class="td-mono" style="text-align:right;font-weight:700;color:${resultMes.reduce((a,b)=>a+b,0)>=0?'var(--green)':'var(--red)'}">${fmt(resultMes.reduce((a,b)=>a+b,0))}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 14px;color:var(--text-2)">Margem %</td>
-          ${totEntMes.map((v,i)=>`<td class="td-mono" style="text-align:right;color:${resultMes[i]>=0?'var(--green)':'var(--red)'}">${v>0?Math.round((resultMes[i]/v)*100)+'%':'—'}</td>`).join('')}
-          <td class="td-mono" style="text-align:right">${totEntMes.reduce((a,b)=>a+b,0)>0?Math.round((resultMes.reduce((a,b)=>a+b,0)/totEntMes.reduce((a,b)=>a+b,0))*100)+'%':'—'}</td>
-        </tr>
-      </tbody>
-    </table>
-    </div>`;
-  }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
-}
-
-// ── FILTRAR CATEGORIAS POR TIPO no modal de lançamentos ──
-function filtrarCategoriasPorTipo(){
-  const tipo=document.getElementById('lc-tipo')?.value;
-  const sel=document.getElementById('lc-cat');
-  if(!sel||!tipo)return;
-  Array.from(sel.options).forEach(opt=>{
-    if(!opt.value){opt.style.display='';return;}
-    const optTipo=opt.text.startsWith('[entrada]')?'entrada':'saida';
-    opt.style.display=optTipo===tipo?'':'none';
-  });
-  // Limpar seleção se tipo incompatível
-  const cur=sel.options[sel.selectedIndex];
-  if(cur&&cur.value){
-    const curTipo=cur.text.startsWith('[entrada]')?'entrada':'saida';
-    if(curTipo!==tipo)sel.value='';
-  }
-}
-
-// ── ANÁLISE ──
-async function loadAnalise(){
-  const el=document.getElementById('analise-content');
-  el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
-  try{
-    // Buscar lançamentos pagos do ano
-    const ano=new Date().getFullYear();
-    let q=`select=*,clientes(nome)&tipo=eq.entrada&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
-    const entradas=await dbGet('lancamentos',q);
-    let qd=`select=*&tipo=eq.saida&status=eq.pago&data_pagamento=gte.${ano}-01-01`;
-    const saidas=await dbGet('lancamentos',qd);
-
-    // Rentabilidade por front
-    const fronts=['Nacasa Comunicação','Nacasa Educação'];
-    const rentab=fronts.map(f=>({
-      front:f,
-      receita:entradas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
-      despesa:saidas.filter(l=>l.front===f).reduce((s,l)=>s+Number(l.valor),0),
-    })).map(f=>({...f,margem:f.receita-f.despesa,pct:f.receita>0?Math.round(((f.receita-f.despesa)/f.receita)*100):0}));
-
-    // Concentração por cliente
-    const totalRec=entradas.reduce((s,l)=>s+Number(l.valor),0);
-    const porCliente={};
-    entradas.forEach(l=>{
-      const nome=l.clientes?l.clientes.nome:'Sem cliente';
-      porCliente[nome]=(porCliente[nome]||0)+Number(l.valor);
-    });
-    const ranking=Object.entries(porCliente).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>({
-      nome,val,pct:totalRec>0?Math.round((val/totalRec)*100):0
-    }));
-
-    const rentRows=rentab.map(f=>`<tr>
-      <td>${frontTag(f.front)}</td>
-      <td class="td-mono" style="color:var(--green)"><strong>${fmt(f.receita)}</strong></td>
-      <td class="td-mono" style="color:var(--red)">${fmt(f.despesa)}</td>
-      <td class="td-mono"><strong>${fmt(f.margem)}</strong></td>
-      <td>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-            <div style="width:${Math.max(0,f.pct)}%;height:100%;background:${f.pct>=50?'var(--green)':f.pct>=30?'var(--gold)':'var(--red)'};border-radius:3px"></div>
-          </div>
-          <span style="font-size:12px;font-weight:600;color:${f.pct>=50?'var(--green)':f.pct>=30?'var(--amber)':'var(--red)'}">${f.pct}%</span>
-        </div>
-      </td>
-    </tr>`).join('');
-
-    const concRows=ranking.map(r=>`<tr>
-      <td class="tpri">${r.nome}</td>
-      <td class="td-mono"><strong>${fmt(r.val)}</strong></td>
-      <td>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-            <div style="width:${r.pct}%;height:100%;background:${r.pct>30?'var(--red)':r.pct>15?'var(--gold)':'var(--green)'};border-radius:3px"></div>
-          </div>
-          <span style="font-size:12px;font-weight:700;color:${r.pct>30?'var(--red)':r.pct>15?'var(--amber)':'var(--green)'}">${r.pct}%</span>
-        </div>
-      </td>
-      <td>${r.pct>30?'<span class="badge badge-red badge-dot">Risco alto</span>':r.pct>15?'<span class="badge badge-amber badge-dot">Atenção</span>':'<span class="badge badge-green badge-dot">Saudável</span>'}</td>
-    </tr>`).join('');
-
-    const riscoAlert=ranking.filter(r=>r.pct>30);
+    // Indicador lateral
+    const kpiLateral=(label,valor,sub,cor)=>`
+      <div style="padding:16px;border-bottom:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:6px">${label}</div>
+        <div style="font-size:22px;font-weight:700;color:${cor}">${valor}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px">${sub}</div>
+      </div>`;
 
     el.innerHTML=`
-    ${riscoAlert.length>0?`
-    <div style="background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--rlg);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-      <i class="ti ti-alert-triangle" style="font-size:20px;color:var(--red);flex-shrink:0"></i>
-      <div>
-        <div style="font-weight:600;color:var(--red);font-size:13px">Concentração de risco elevada</div>
-        <div style="font-size:12px;color:var(--red-text);margin-top:2px">${riscoAlert.map(r=>`<strong>${r.nome}</strong> representa ${r.pct}% da receita`).join(' · ')}</div>
-      </div>
-    </div>`:''}
-    <div class="cgrid">
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start">
+
+      <!-- DRE HIERÁRQUICO -->
       <div class="card">
-        <div class="card-header"><div><h3>Rentabilidade por front</h3><div class="card-sub">${ano} — receitas e despesas pagas</div></div></div>
-        <div class="tw"><table>
-          <thead><tr><th>Front</th><th>Receita</th><th>Despesa</th><th>Margem</th><th>Margem %</th></tr></thead>
-          <tbody>${rentRows||'<tr><td colspan="5"><div class="empty" style="padding:24px"><p>Sem dados suficientes</p></div></td></tr>'}</tbody>
-        </table></div>
+        <div class="card-header" style="border-bottom:1px solid var(--border);padding-bottom:12px">
+          <div><h3>Demonstrativo de Resultado</h3><div class="card-sub">${ano}${comparar?' vs '+anoAnt:''} · ${FRONT||'Todos os fronts'}</div></div>
+        </div>
+        <div style="padding:12px 4px">
+
+          <!-- RECEITAS -->
+          <div style="padding:6px 12px;margin-bottom:4px">
+            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Receitas</span>
+          </div>
+          ${dreRow('RECEITA BRUTA', recBruta, recBruta, 'green', 0, true)}
+          ${catEnt.map(([cat,val])=>dreRow(cat, val, recBruta, 'green', 1)).join('')}
+
+          <!-- DESPESAS -->
+          <div style="padding:6px 12px;margin:8px 0 4px">
+            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Despesas</span>
+          </div>
+          ${dreRow('TOTAL DE DESPESAS', despTotal, recBruta, 'red', 0, true)}
+          ${catSai.map(([cat,val])=>dreRow(cat, val, recBruta, 'red', 1)).join('')}
+
+          <!-- RESULTADO -->
+          <div style="margin-top:12px;border-top:2px solid var(--blue);padding-top:8px">
+            ${dreRow('RESULTADO OPERACIONAL', resultado, recBruta, resultado>=0?'green':'red', 0, false, true)}
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px">
+              <span style="font-size:12px;color:var(--text-2)">Margem líquida</span>
+              <span style="font-size:16px;font-weight:700;color:${margem>=0?'var(--green)':'var(--red)'}">${margem.toFixed(1)}%</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div class="card-header"><div><h3>Concentração por cliente</h3><div class="card-sub">% da receita total — alerta acima de 30%</div></div></div>
+
+      <!-- INDICADORES LATERAIS -->
+      <div class="card" style="overflow:hidden">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--navy)">
+          <div style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.06em">Indicadores ${ano}</div>
+        </div>
+        ${kpiLateral('Margem líquida', margem.toFixed(1)+'%',
+          margemAnt!==null?`${margem>=margemAnt?'▲':'▼'} ${Math.abs(margem-margemAnt).toFixed(1)}pp vs ${anoAnt}`:'Resultado sobre receita bruta',
+          margem>=0?'var(--green)':'var(--red)')}
+        ${kpiLateral('Crescimento de receita',
+          crescRec!==null?(crescRec>=0?'+':'')+crescRec.toFixed(1)+'%':'—',
+          crescRec!==null?`vs ${anoAnt}: ${fmt(recBrutaAnt)}`:'Sem dado do período anterior',
+          crescRec===null?'var(--text-2)':crescRec>=0?'var(--green)':'var(--red)')}
+        ${kpiLateral('Receita média por cliente',
+          clientesComRec.size>0?fmt(recMediaCliente):'—',
+          `${clientesComRec.size} cliente(s) com receita`,
+          'var(--blue)')}
+        ${kpiLateral('Receita recorrente',
+          pctRecorrente+'%',
+          `${fmt(recRecorrente)} de contratos ativos`,
+          pctRecorrente>=70?'var(--green)':pctRecorrente>=40?'var(--amber)':'var(--red)')}
+      </div>
+    </div>
+
+    <!-- TABELA MENSAL -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-header" style="cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <div><h3>Detalhamento mensal — ${ano}</h3><div class="card-sub">Clique para expandir/recolher</div></div>
+        <i class="ti ti-chevron-down"></i>
+      </div>
+      <div style="display:none">
         <div class="tw"><table>
-          <thead><tr><th>Cliente</th><th>Receita</th><th>Concentração</th><th>Risco</th></tr></thead>
-          <tbody>${concRows||'<tr><td colspan="4"><div class="empty" style="padding:24px"><p>Sem dados suficientes</p></div></td></tr>'}</tbody>
+          <thead><tr>
+            <th>Mês</th>
+            <th style="color:var(--green)">Receita</th>
+            <th style="color:var(--red)">Despesa</th>
+            <th>Resultado</th>
+            <th>Margem %</th>
+          </tr></thead>
+          <tbody>
+            ${dadosMeses.map(d=>`<tr>
+              <td style="font-weight:600">${d.mes}</td>
+              <td class="td-mono" style="color:var(--green)">${d.ent>0?fmt(d.ent):'—'}</td>
+              <td class="td-mono" style="color:var(--red)">${d.sai>0?fmt(d.sai):'—'}</td>
+              <td class="td-mono" style="color:${d.res>=0?'var(--green)':'var(--red)'};font-weight:600">${d.res!==0?fmt(d.res):'—'}</td>
+              <td class="td-mono" style="color:${d.mg!==null&&d.mg>=0?'var(--green)':'var(--red)'}">${d.mg!==null?d.mg+'%':'—'}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot style="background:var(--blue-light);font-weight:700">
+            <tr>
+              <td>TOTAL</td>
+              <td class="td-mono" style="color:var(--green)">${fmt(recBruta)}</td>
+              <td class="td-mono" style="color:var(--red)">${fmt(despTotal)}</td>
+              <td class="td-mono" style="color:${resultado>=0?'var(--green)':'var(--red)'}">${fmt(resultado)}</td>
+              <td class="td-mono" style="color:${margem>=0?'var(--green)':'var(--red)'}">${margem.toFixed(1)}%</td>
+            </tr>
+          </tfoot>
         </table></div>
       </div>
     </div>`;
-  
-    // ── CURVA ABC ──
-    const ctsFull=await dbGet('contratos',`select=id,descricao,valor_total,front,clientes(nome)&status=in.(ativo,encerrado)&order=valor_total.desc${FRONT?'&front=eq.'+encodeURIComponent(FRONT):''}`);
-    const totalCts=ctsFull.reduce((s,ct)=>s+Number(ct.valor_total),0);
-    let acumCts=0;
-    const abcCts=ctsFull.map(ct=>{
-      acumCts+=Number(ct.valor_total);
-      const pct=totalCts>0?Math.round((Number(ct.valor_total)/totalCts)*100):0;
-      const acumPct=totalCts>0?Math.round((acumCts/totalCts)*100):0;
-      return {...ct,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
-    });
-    const prodMap={};
-    entradas.filter(l=>l.status==='pago').forEach(l=>{
-      const p=l.categorias?.nome||'Sem categoria';
-      prodMap[p]=(prodMap[p]||0)+Number(l.valor);
-    });
-    const totalProd=Object.values(prodMap).reduce((a,b)=>a+b,0);
-    let acumProd=0;
-    const abcProd=Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>{
-      acumProd+=val;
-      const pct=totalProd>0?Math.round((val/totalProd)*100):0;
-      const acumPct=totalProd>0?Math.round((acumProd/totalProd)*100):0;
-      return {nome,val,pct,acumPct,cls:acumPct<=80?'A':acumPct<=95?'B':'C'};
-    });
-    const abcBadge=cls=>({A:'<span class="badge badge-green">Classe A</span>',B:'<span class="badge badge-amber">Classe B</span>',C:'<span class="badge badge-gray">Classe C</span>'}[cls]);
-    const abcBar=(pct,cls)=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:5px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${cls==='A'?'var(--green)':cls==='B'?'var(--gold)':'var(--text-3)'};border-radius:2px"></div></div><span style="font-size:11px">${pct}%</span></div>`;
-    el.insertAdjacentHTML('beforeend',`
-    <div class="cgrid" style="margin-top:16px">
-      <div class="card">
-        <div class="card-header"><div><h3>Curva ABC — Contratos</h3><div class="card-sub">Por valor total contratado</div></div></div>
-        <div class="tw"><table>
-          <thead><tr><th>Cliente / Contrato</th><th>Valor</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
-          <tbody>${abcCts.map(ct=>`<tr>
-            <td><div class="tpri">${ct.clientes?ct.clientes.nome:'—'}</div><div style="font-size:11px;color:var(--text-3)">${ct.descricao}</div></td>
-            <td class="td-mono">${fmt(ct.valor_total)}</td>
-            <td class="td-mono">${ct.pct}%</td>
-            <td>${abcBar(ct.acumPct,ct.cls)}</td>
-            <td>${abcBadge(ct.cls)}</td>
-          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem contratos</p></div></td></tr>'}
-          </tbody>
-        </table></div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div><h3>Curva ABC — Produtos</h3><div class="card-sub">Por receita realizada (pagos)</div></div></div>
-        <div class="tw"><table>
-          <thead><tr><th>Produto / Categoria</th><th>Receita</th><th>%</th><th>Acumulado</th><th>Classe</th></tr></thead>
-          <tbody>${abcProd.map(p=>`<tr>
-            <td class="tpri">${p.nome}</td>
-            <td class="td-mono">${fmt(p.val)}</td>
-            <td class="td-mono">${p.pct}%</td>
-            <td>${abcBar(p.acumPct,p.cls)}</td>
-            <td>${abcBadge(p.cls)}</td>
-          </tr>`).join('')||'<tr><td colspan="5"><div class="empty" style="padding:16px"><p>Sem lançamentos pagos</p></div></td></tr>'}
-          </tbody>
-        </table></div>
-      </div>
-    </div>`);
 
   }catch(e){el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i><p>Erro: ${e.message}</p></div>`;}
 }
 
-// ── RELATÓRIOS ──
-function loadRelatorios(){
-  document.getElementById('relatorios-content').innerHTML=`
-  <div class="rel-grid">
-    <div class="rel-card"><div style="display:flex;align-items:center;gap:14px;flex:1"><div class="rel-icon"><i class="ti ti-arrows-exchange"></i></div><div class="rel-info"><h3>Fluxo de caixa</h3><p>Todas as entradas e saídas do período</p></div></div><button class="btn btn-outline" onclick="exportFluxo()"><i class="ti ti-download"></i> Excel</button></div>
-    <div class="rel-card"><div style="display:flex;align-items:center;gap:14px;flex:1"><div class="rel-icon"><i class="ti ti-ruler-measure"></i></div><div class="rel-info"><h3>Medições por contrato</h3><p>Previsto × realizado com desvios</p></div></div><button class="btn btn-outline" onclick="exportContratos()"><i class="ti ti-download"></i> Excel</button></div>
-    <div class="rel-card"><div style="display:flex;align-items:center;gap:14px;flex:1"><div class="rel-icon"><i class="ti ti-users"></i></div><div class="rel-info"><h3>Base de clientes</h3><p>Cadastro completo dos clientes ativos</p></div></div><button class="btn btn-outline" onclick="exportClientes()"><i class="ti ti-download"></i> Excel</button></div>
-    <div class="rel-card"><div style="display:flex;align-items:center;gap:14px;flex:1"><div class="rel-icon"><i class="ti ti-chart-bar"></i></div><div class="rel-info"><h3>DRE simplificado</h3><p>Receitas, despesas e margem por mês</p></div></div><button class="btn btn-outline" onclick="exportDRE()"><i class="ti ti-download"></i> Excel</button></div>
-    <div class="rcard"><div style="display:flex;align-items:center;gap:14px;flex:1"><div class="rico"><i class="ti ti-filter"></i></div><div class="ri"><h3>Pipeline comercial</h3><p>Funil de leads com etapa e temperatura</p></div></div><button class="btn btn-out2" onclick="exportFunil()"><i class="ti ti-download"></i> Excel</button></div>
-  </div>`;
-}
 
-async function exportFluxo(){
-  try{
-    let q=`select=*,categorias(nome),clientes(nome)&order=data_vencimento.asc`;if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
-    const rows=await dbGet('lancamentos',q);
-    xlsxExport(rows.map(r=>({Tipo:r.tipo,Front:r.front,Descrição:r.descricao,Categoria:r.categorias?r.categorias.nome:'',Cliente:r.clientes?r.clientes.nome:'',Valor:Number(r.valor),Status:r.status,Vencimento:r.data_vencimento||'',Pagamento:r.data_pagamento||'',Forma:r.forma_pagamento||'',Observação:r.observacao||''})),'fluxo-caixa');
-    notify('Exportado com sucesso!','success');
-  }catch(e){notify('Erro: '+e.message,'error');}
-}
-async function exportContratos(){
-  try{
-    const rows=await dbGet('medicoes','select=*,contratos(descricao,front,clientes(nome))&order=mes_referencia.asc');
-    xlsxExport(rows.map(r=>({Contrato:r.contratos?r.contratos.descricao:'',Cliente:r.contratos&&r.contratos.clientes?r.contratos.clientes.nome:'',Front:r.contratos?r.contratos.front:'',Mês:r.mes_referencia,Previsto:Number(r.valor_previsto),Medido:Number(r.valor_medido),Saldo:Number(r.saldo),'Desvio%':Number(r.desvio_percentual)})),'contratos-medicoes');
-    notify('Exportado com sucesso!','success');
-  }catch(e){notify('Erro: '+e.message,'error');}
-}
-async function exportClientes(){
-  try{
-    let q=`select=*&order=nome.asc`;if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;
-    const rows=await dbGet('clientes',q);
-    xlsxExport(rows.map(r=>({Nome:r.nome,Front:r.front,Tipo:r.tipo_pessoa,Documento:r.documento||'',Contato:r.contato||'',Email:r.email||'',Telefone:r.telefone||'',Origem:r.origem||'',Responsável:r.responsavel||'',Status:r.ativo?'Ativo':'Inativo'})),'clientes');
-    notify('Exportado com sucesso!','success');
-  }catch(e){notify('Erro: '+e.message,'error');}
-}
 async function exportDRE(){
   try{
     let q=`select=*&order=data_vencimento.asc`;if(FRONT)q+=`&front=eq.${encodeURIComponent(FRONT)}`;

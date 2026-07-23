@@ -2367,6 +2367,7 @@ async function saveLancamento(id){
     contrato_id:document.getElementById('lc-ct').value||null,
   };
   if(!base.descricao||!valorTotal||!base.data_vencimento){notify('Descrição, valor e vencimento são obrigatórios','error');return;}
+  if(!base.categoria_id){notify('Categoria é obrigatória','error');return;}
   try{
     if(id){
       await dbUpdate('lancamentos',id,{...base,valor:valorTotal,observacao:obsCartao});
@@ -2793,7 +2794,14 @@ function openCategoriaModal(cat){
 }
 
 async function saveCategoria(id){
-  const data={nome:document.getElementById('cat-nome').value.trim(),tipo:document.getElementById('cat-tipo').value,ativa:true};
+  const tipo=document.getElementById('cat-tipo').value;
+  const tipoContabil=tipo==='entrada'?'receita_operacional':(document.getElementById('cat-contabil')?.value||'despesa_operacional');
+  const data={
+    nome:document.getElementById('cat-nome').value.trim(),
+    tipo,
+    tipo_contabil:tipoContabil,
+    ativa:true
+  };
   if(!data.nome){notify('Nome é obrigatório','error');return;}
   try{
     id?await dbUpdate('categorias',id,data):await dbInsert('categorias',data);
@@ -2878,7 +2886,7 @@ async function loadCategorias(){
   const el=document.getElementById('categorias-content');
   el.innerHTML='<div class="loading"><div class="spin"></div>Carregando...</div>';
   try{
-    const cats=await dbGet('categorias','select=*&order=tipo.asc,nome.asc');
+    const cats=await dbGet('categorias','select=*&order=tipo.asc,tipo_contabil.asc,nome.asc');
     const entrada=cats.filter(c=>c.tipo==='entrada');
     const saida=cats.filter(c=>c.tipo==='saida');
     const renderGrupo=(lista,tipo)=>`
@@ -2890,9 +2898,12 @@ async function loadCategorias(){
           </h3>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>Nome</th><th>Status</th><th style="width:90px"></th></tr></thead>
-          <tbody>${lista.map(cat=>`<tr>
+          <thead><tr><th>Nome</th><th>Classificação contábil</th><th>Status</th><th style="width:90px"></th></tr></thead>
+          <tbody>${lista.map(cat=>{
+            const tcLabel={'receita_operacional':'Receita operacional','imposto_receita':'Imposto s/ receita','despesa_operacional':'Despesa operacional','imposto_lucro':'Imposto s/ lucro'};
+            return `<tr>
             <td class="tpri">${cat.nome}</td>
+            <td><span class="badge badge-gray" style="font-size:10px">${tcLabel[cat.tipo_contabil]||'—'}</span></td>
             <td>${cat.ativa?'<span class="badge badge-green badge-dot">Ativa</span>':'<span class="badge badge-gray badge-dot">Inativa</span>'}</td>
             <td><div class="td-actions">
               <button class="btn btn-out2 btn-sm" onclick="openCategoriaModal(${JSON.stringify(cat).replace(/"/g,'&quot;')})"><i class="ti ti-edit"></i></button>
@@ -2900,7 +2911,7 @@ async function loadCategorias(){
                 <i class="ti ${cat.ativa?'ti-eye-off':'ti-eye'}"></i>
               </button>
             </div></td>
-          </tr>`).join('')||'<tr><td colspan="3"><div class="empty" style="padding:20px"><p>Nenhuma categoria</p></div></td></tr>'}
+          </tr>`;}).join('')||'<tr><td colspan="3"><div class="empty" style="padding:20px"><p>Nenhuma categoria</p></div></td></tr>'}
           </tbody>
         </table></div>
       </div>`;
@@ -2909,14 +2920,24 @@ async function loadCategorias(){
 }
 
 function openCategoriaModal(cat){
+  const isSaida = cat&&cat.tipo==='saida';
   openModal(`<div class="modal">
     <div class="mh"><h3>${cat?'Editar categoria':'Nova categoria'}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
     <div class="mb"><div class="fg">
-      <div><label>Nome *</label><input id="cat-nome" value="${cat?cat.nome:''}" placeholder="Ex: Mentoria individual, Impostos..."></div>
-      <div><label>Tipo *</label><select id="cat-tipo">
+      <div><label>Nome *</label><input id="cat-nome" value="${cat?cat.nome:''}" placeholder="Ex: Gestão de conteúdo, ISS, Ferramentas..."></div>
+      <div><label>Tipo *</label><select id="cat-tipo" onchange="onCatTipoChange()">
         <option value="entrada" ${!cat||cat.tipo==='entrada'?'selected':''}>Entrada</option>
         <option value="saida" ${cat&&cat.tipo==='saida'?'selected':''}>Saída</option>
       </select></div>
+      <div id="cat-contabil-wrap" style="${!isSaida?'display:none':''}">
+        <label>Classificação contábil *</label>
+        <select id="cat-contabil">
+          <option value="despesa_operacional" ${!cat||cat.tipo_contabil==='despesa_operacional'?'selected':''}>Despesa operacional</option>
+          <option value="imposto_receita" ${cat&&cat.tipo_contabil==='imposto_receita'?'selected':''}>Imposto sobre receita (ISS, PIS, COFINS)</option>
+          <option value="imposto_lucro" ${cat&&cat.tipo_contabil==='imposto_lucro'?'selected':''}>Imposto sobre lucro (IRPJ, CSLL)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px">Define onde esta categoria aparece na DRE</div>
+      </div>
     </div></div>
     <div class="mf">
       <button class="btn btn-out2" onclick="closeModalForce()">Cancelar</button>
@@ -2925,8 +2946,21 @@ function openCategoriaModal(cat){
   </div>`);
 }
 
+function onCatTipoChange(){
+  const tipo=document.getElementById('cat-tipo')?.value;
+  const wrap=document.getElementById('cat-contabil-wrap');
+  if(wrap) wrap.style.display=tipo==='saida'?'':'none';
+}
+
 async function saveCategoria(id){
-  const data={nome:document.getElementById('cat-nome').value.trim(),tipo:document.getElementById('cat-tipo').value,ativa:true};
+  const tipo=document.getElementById('cat-tipo').value;
+  const tipoContabil=tipo==='entrada'?'receita_operacional':(document.getElementById('cat-contabil')?.value||'despesa_operacional');
+  const data={
+    nome:document.getElementById('cat-nome').value.trim(),
+    tipo,
+    tipo_contabil:tipoContabil,
+    ativa:true
+  };
   if(!data.nome){notify('Nome é obrigatório','error');return;}
   try{
     id?await dbUpdate('categorias',id,data):await dbInsert('categorias',data);
@@ -2992,8 +3026,8 @@ async function loadDRE(){
     const anoAnt=ano-1;
 
     // Buscar lançamentos do período atual
-    let qe=`select=*,categorias(nome),clientes(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
-    let qs=`select=*,categorias(nome)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
+    let qe=`select=*,categorias(nome,tipo_contabil),clientes(nome)&tipo=eq.entrada&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
+    let qs=`select=*,categorias(nome,tipo_contabil)&tipo=eq.saida&status=in.(pago,previsto)&data_vencimento=gte.${ano}-01-01&data_vencimento=lte.${ano}-12-31`;
     if(FRONT){qe+=`&front=eq.${encodeURIComponent(FRONT)}`;qs+=`&front=eq.${encodeURIComponent(FRONT)}`;}
     const [entradas,saidas]=await Promise.all([dbGet('lancamentos',qe),dbGet('lancamentos',qs)]);
 
@@ -3014,17 +3048,36 @@ async function loadDRE(){
     const recBrutaAnt= entAnt.reduce((s,l)=>s+Number(l.valor||0),0);
     const despAnt    = saiAnt.reduce((s,l)=>s+Number(l.valor||0),0);
     const resultAnt  = recBrutaAnt - despAnt;
-    const crescRec   = recBrutaAnt>0?((recBruta-recBrutaAnt)/recBrutaAnt*100):null;
+    const crescRec   = recBrutaAnt>0?((recOperacional-recBrutaAnt)/recBrutaAnt*100):null;
     const margemAnt  = recBrutaAnt>0?((resultAnt/recBrutaAnt)*100):null;
 
-    // Agrupamento por categoria
-    const porCat=(arr)=>{
+    // Agrupamento por categoria e tipo_contabil
+    const porCatTC=(arr)=>{
       const m={};
-      arr.forEach(l=>{const k=l.categorias?.nome||'Sem categoria'; m[k]=(m[k]||0)+Number(l.valor||0);});
-      return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+      arr.forEach(l=>{
+        const k=l.categorias?.nome||'Sem categoria';
+        const tc=l.categorias?.tipo_contabil||'despesa_operacional';
+        if(!m[tc]) m[tc]={};
+        m[tc][k]=(m[tc][k]||0)+Number(l.valor||0);
+      });
+      return m;
     };
-    const catEnt = porCat(entradas);
-    const catSai = porCat(saidas);
+    const catEntTC = porCatTC(entradas); // { receita_operacional: {cat:val} }
+    const catSaiTC = porCatTC(saidas);   // { imposto_receita: {}, despesa_operacional: {}, imposto_lucro: {} }
+
+    // Totais por tipo_contabil
+    const somaTC=(tc,obj)=>Object.values(obj[tc]||{}).reduce((s,v)=>s+v,0);
+    const recOperacional = somaTC('receita_operacional', catEntTC);
+    const impReceita     = somaTC('imposto_receita', catSaiTC);
+    const despOperacional= somaTC('despesa_operacional', catSaiTC);
+    const impLucro       = somaTC('imposto_lucro', catSaiTC);
+    const recLiquida     = recOperacional - impReceita;
+    const resultOperac   = recLiquida - despOperacional;
+    const resultLiquido  = resultOperac - impLucro;
+    const margemLiq      = recOperacional>0?(resultLiquido/recOperacional*100):0;
+
+    // Listas de categorias por tipo
+    const listaCatTC=(tc,obj)=>Object.entries(obj[tc]||{}).sort((a,b)=>b[1]-a[1]);
 
     // Clientes únicos com receita
     const clientesComRec=new Set(entradas.filter(l=>l.clientes).map(l=>l.clientes.nome));
@@ -3082,26 +3135,50 @@ async function loadDRE(){
         </div>
         <div style="padding:12px 4px">
 
-          <!-- RECEITAS -->
-          <div style="padding:6px 12px;margin-bottom:4px">
-            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Receitas</span>
-          </div>
-          ${dreRow('RECEITA BRUTA', recBruta, recBruta, 'green', 0, true)}
-          ${catEnt.map(([cat,val])=>dreRow(cat, val, recBruta, 'green', 1)).join('')}
+          <!-- RECEITA BRUTA -->
+          <div style="padding:6px 12px;margin-bottom:4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Receitas</span></div>
+          ${dreRow('RECEITA BRUTA', recOperacional, recOperacional, 'green', 0, true)}
+          ${listaCatTC('receita_operacional',catEntTC).map(([cat,val])=>dreRow(cat,val,recOperacional,'green',1)).join('')}
 
-          <!-- DESPESAS -->
-          <div style="padding:6px 12px;margin:8px 0 4px">
-            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Despesas</span>
-          </div>
-          ${dreRow('TOTAL DE DESPESAS', despTotal, recBruta, 'red', 0, true)}
-          ${catSai.map(([cat,val])=>dreRow(cat, val, recBruta, 'red', 1)).join('')}
+          <!-- IMPOSTOS SOBRE RECEITA -->
+          ${impReceita>0?`
+          <div style="padding:6px 12px;margin:8px 0 4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">(-) Impostos sobre receita</span></div>
+          ${dreRow('Total impostos s/ receita', impReceita, recOperacional, 'red', 0, true)}
+          ${listaCatTC('imposto_receita',catSaiTC).map(([cat,val])=>dreRow(cat,val,recOperacional,'red',1)).join('')}
+          `:''}
 
-          <!-- RESULTADO -->
+          <!-- RECEITA LÍQUIDA -->
+          <div style="background:var(--surface-2);border-radius:6px;margin:8px 4px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border)">
+            <span style="font-size:13px;font-weight:700;color:var(--navy)">= RECEITA LÍQUIDA</span>
+            <span style="font-size:15px;font-weight:700;color:${recLiquida>=0?'var(--green)':'var(--red)'}">${fmt(recLiquida)}</span>
+          </div>
+
+          <!-- DESPESAS OPERACIONAIS -->
+          ${despOperacional>0?`
+          <div style="padding:6px 12px;margin:8px 0 4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">(-) Despesas operacionais</span></div>
+          ${dreRow('Total despesas operacionais', despOperacional, recOperacional, 'red', 0, true)}
+          ${listaCatTC('despesa_operacional',catSaiTC).map(([cat,val])=>dreRow(cat,val,recOperacional,'red',1)).join('')}
+          `:''}
+
+          <!-- RESULTADO OPERACIONAL -->
+          <div style="background:var(--surface-2);border-radius:6px;margin:8px 4px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border)">
+            <span style="font-size:13px;font-weight:700;color:var(--navy)">= RESULTADO OPERACIONAL</span>
+            <span style="font-size:15px;font-weight:700;color:${resultOperac>=0?'var(--green)':'var(--red)'}">${fmt(resultOperac)}</span>
+          </div>
+
+          <!-- IMPOSTOS SOBRE LUCRO -->
+          ${impLucro>0?`
+          <div style="padding:6px 12px;margin:8px 0 4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">(-) Impostos sobre lucro</span></div>
+          ${dreRow('Total impostos s/ lucro', impLucro, recOperacional, 'red', 0, true)}
+          ${listaCatTC('imposto_lucro',catSaiTC).map(([cat,val])=>dreRow(cat,val,recOperacional,'red',1)).join('')}
+          `:''}
+
+          <!-- RESULTADO LÍQUIDO -->
           <div style="margin-top:12px;border-top:2px solid var(--blue);padding-top:8px">
-            ${dreRow('RESULTADO OPERACIONAL', resultado, recBruta, resultado>=0?'green':'red', 0, false, true)}
+            ${dreRow('RESULTADO LÍQUIDO', resultLiquido, recOperacional, resultLiquido>=0?'green':'red', 0, false, true)}
             <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px">
               <span style="font-size:12px;color:var(--text-2)">Margem líquida</span>
-              <span style="font-size:16px;font-weight:700;color:${margem>=0?'var(--green)':'var(--red)'}">${margem.toFixed(1)}%</span>
+              <span style="font-size:16px;font-weight:700;color:${margemLiq>=0?'var(--green)':'var(--red)'}">${margemLiq.toFixed(1)}%</span>
             </div>
           </div>
         </div>
@@ -3112,9 +3189,9 @@ async function loadDRE(){
         <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--navy)">
           <div style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.06em">Indicadores ${ano}</div>
         </div>
-        ${kpiLateral('Margem líquida', margem.toFixed(1)+'%',
-          margemAnt!==null?`${margem>=margemAnt?'▲':'▼'} ${Math.abs(margem-margemAnt).toFixed(1)}pp vs ${anoAnt}`:'Resultado sobre receita bruta',
-          margem>=0?'var(--green)':'var(--red)')}
+        ${kpiLateral('Margem líquida', margemLiq.toFixed(1)+'%',
+          margemAnt!==null?`${margemLiq>=margemAnt?'▲':'▼'} ${Math.abs(margemLiq-margemAnt).toFixed(1)}pp vs ${anoAnt}`:'Resultado líquido sobre receita bruta',
+          margemLiq>=0?'var(--green)':'var(--red)')}
         ${kpiLateral('Crescimento de receita',
           crescRec!==null?(crescRec>=0?'+':'')+crescRec.toFixed(1)+'%':'—',
           crescRec!==null?`vs ${anoAnt}: ${fmt(recBrutaAnt)}`:'Sem dado do período anterior',

@@ -3129,13 +3129,9 @@ function openCategoriaModal(cat){
       <button class="btn btn-pri" onclick="saveCategoria(${cat?`'${cat.id}'`:'null'})"><i class="ti ti-check"></i> Salvar</button>
     </div>
   </div>`);
+  setTimeout(()=>onCatTipoChange(),50);
 }
 
-function onCatTipoChange(){
-  const tipo=document.getElementById('cat-tipo')?.value;
-  const wrap=document.getElementById('cat-contabil-wrap');
-  if(wrap) wrap.style.display=tipo==='saida'?'':'none';
-}
 
 
 function onCatTipoChange(){

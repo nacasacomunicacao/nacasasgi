@@ -3094,6 +3094,9 @@ async function loadCategorias(){
               <button class="btn btn-out2 btn-sm" onclick="toggleCategoria('${cat.id}',${!cat.ativa})" title="${cat.ativa?'Desativar':'Ativar'}">
                 <i class="ti ${cat.ativa?'ti-eye-off':'ti-eye'}"></i>
               </button>
+              <button class="btn btn-del btn-sm" onclick="deleteCategoria('${cat.id}','${cat.nome}')" title="Excluir">
+                <i class="ti ti-trash"></i>
+              </button>
             </div></td>
           </tr>`).join(''):`<tr><td colspan="4"><div class="empty" style="padding:20px"><p>Nenhuma categoria</p></div></td></tr>`}
           </tbody>
@@ -3154,6 +3157,23 @@ async function saveCategoria(id){
     id?await dbUpdate('categorias',id,data):await dbInsert('categorias',data);
     closeModalForce();notify(id?'Categoria atualizada':'Categoria criada','success');loadCategorias();
   }catch(e){notify('Erro: '+e.message,'error');}
+}
+
+async function deleteCategoria(id, nome){
+  if(!confirm(`Excluir a categoria "${nome}"? Esta ação não pode ser desfeita.
+
+Atenção: lançamentos vinculados a esta categoria perderão a classificação.`)) return;
+  try{
+    await dbDelete('categorias', id);
+    notify('Categoria excluída', 'info');
+    loadCategorias();
+  }catch(e){
+    if(e.message.includes('foreign key') || e.message.includes('violates')){
+      notify('Não é possível excluir — existem lançamentos vinculados a esta categoria. Desative-a em vez de excluir.', 'error');
+    } else {
+      notify('Erro: ' + e.message, 'error');
+    }
+  }
 }
 
 async function toggleCategoria(id,ativa){

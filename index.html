@@ -402,6 +402,10 @@ tbody tr:hover .td-actions{opacity:1}
   .modal{margin:8px;max-height:95vh}
   .form-row{grid-template-columns:1fr}
 }
+/* Maiúsculas automáticas nos campos de identificação */
+input[data-upper="true"], textarea[data-upper="true"] {
+  text-transform: uppercase;
+}
 </style>
 </head>
 <body>
@@ -823,6 +827,8 @@ async function exportMedicoes(){
     notify('Exportado com sucesso!','success');
   }catch(e){notify('Erro: '+e.message,'error');}
 }
+
+const toUpper = v => v ? v.toUpperCase().trim() : v;
 
 const fmt=v=>'R$\u00a0'+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
 const fmtDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—';
@@ -1269,7 +1275,7 @@ function openClienteModal(c){
     <div class="modal-body"><div class="form-grid">
       <div class="form-section">Dados principais</div>
       <div class="form-row">
-        <div><label>Nome / Razão social *</label><input id="c-nome" value="${c?c.nome:''}" placeholder="Nome completo ou razão social"></div>
+        <div><label>Nome / Razão social *</label><input id="c-nome" data-upper="true" value="${c?c.nome:''}" placeholder="Nome completo ou razão social"></div>
         <div><label>Tipo de pessoa</label><select id="c-tipo"><option value="PJ" ${!c||c.tipo_pessoa==='PJ'?'selected':''}>Pessoa Jurídica</option><option value="PF" ${c&&c.tipo_pessoa==='PF'?'selected':''}>Pessoa Física</option></select></div>
       </div>
       <div class="form-row">
@@ -1278,7 +1284,7 @@ function openClienteModal(c){
       </div>
       <div class="form-section">Contato</div>
       <div class="form-row">
-        <div><label>Nome do contato</label><input id="c-contato" value="${c?c.contato||'':''}" placeholder="Responsável pelo contrato"></div>
+        <div><label>Nome do contato</label><input id="c-contato" data-upper="true" value="${c?c.contato||'':''}" placeholder="Responsável pelo contrato"></div>
         <div><label>Telefone / WhatsApp</label><input id="c-tel" value="${c?c.telefone||'':''}" placeholder="(84) 9 0000-0000"></div>
       </div>
       <div class="form-row">
@@ -1295,7 +1301,7 @@ function openClienteModal(c){
 }
 
 async function saveCliente(id){
-  const data={nome:document.getElementById('c-nome').value.trim(),tipo_pessoa:document.getElementById('c-tipo').value,documento:document.getElementById('c-doc').value.trim(),front:document.getElementById('c-front').value,contato:document.getElementById('c-contato').value.trim(),telefone:document.getElementById('c-tel').value.trim(),email:document.getElementById('c-email').value.trim(),origem:document.getElementById('c-origem').value.trim(),responsavel:document.getElementById('c-resp').value.trim()};
+  const data={nome:toUpper(document.getElementById('c-nome').value),tipo_pessoa:document.getElementById('c-tipo').value,documento:document.getElementById('c-doc').value.trim(),front:document.getElementById('c-front').value,contato:document.getElementById('c-contato').value.trim(),telefone:document.getElementById('c-tel').value.trim(),email:document.getElementById('c-email').value.trim(),origem:document.getElementById('c-origem').value.trim(),responsavel:document.getElementById('c-resp').value.trim()};
   if(!data.nome){notify('Nome é obrigatório','error');return;}
   try{id?await dbUpdate('clientes',id,data):await dbInsert('clientes',data);closeModalForce();notify(id?'Cliente atualizado com sucesso':'Cliente cadastrado com sucesso','success');loadClientes();}
   catch(e){notify('Erro: '+e.message,'error');}
@@ -1365,7 +1371,7 @@ async function openContratoModal(c){
         <div><label>Front *</label><select id="ct-front"><option value="Nacasa Comunicação" ${!c||c.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${c&&c.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
         <div><label>Status</label><select id="ct-status">${['ativo','pausado','encerrado','cancelado'].map(s=>`<option value="${s}" ${c&&c.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
-      <div><label>Descrição do contrato *</label><input id="ct-desc" value="${c?c.descricao:''}" placeholder="Ex: Gestão de conteúdo — pacote mensal"></div>
+      <div><label>Descrição do contrato *</label><input id="ct-desc" data-upper="true" value="${c?c.descricao:''}" placeholder="Ex: Gestão de conteúdo — pacote mensal"></div>
       <div class="form-section">Valores e prazos</div>
       <div class="form-row">
         <div><label>Valor total (R$) *</label><input id="ct-val" type="number" step="0.01" value="${c?c.valor_total:''}" placeholder="0,00"></div>
@@ -1389,7 +1395,7 @@ async function openContratoModal(c){
 }
 
 async function saveContrato(id){
-  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:document.getElementById('ct-desc').value.trim(),valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,dia_vencimento:parseInt(document.getElementById('ct-dia-venc').value)||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
+  const data={cliente_id:document.getElementById('ct-cli').value||null,front:document.getElementById('ct-front').value,descricao:toUpper(document.getElementById('ct-desc').value),valor_total:parseFloat(document.getElementById('ct-val').value)||0,tipo_cobranca:document.getElementById('ct-tipo').value,data_inicio:document.getElementById('ct-ini').value||null,data_fim:document.getElementById('ct-fim').value||null,dia_vencimento:parseInt(document.getElementById('ct-dia-venc').value)||null,status:document.getElementById('ct-status').value,observacao:document.getElementById('ct-obs').value.trim()};
   if(!data.descricao){notify('Descrição é obrigatória','error');return;}
   if(!data.data_inicio||!data.data_fim){notify('Data de início e fim são obrigatórias','error');return;}
   try{
@@ -2433,7 +2439,7 @@ async function openLancamentoModal(l){
         <div><label>Status *</label><select id="lc-status">${['previsto','pago','atrasado','cancelado'].map(s=>`<option value="${s}" ${l&&l.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="form-section">Dados financeiros</div>
-      <div><label>Descrição *</label><input id="lc-desc" value="${l?l.descricao:''}" placeholder="Descreva este lançamento"></div>
+      <div><label>Descrição *</label><input id="lc-desc" data-upper="true" value="${l?l.descricao:''}" placeholder="Descreva este lançamento"></div>
       <div class="form-row">
         <div><label>Valor (R$) *</label><input id="lc-val" type="number" step="0.01" value="${l?l.valor:''}" placeholder="0,00"></div>
         <div><label>Forma de pagamento</label>
@@ -2490,7 +2496,7 @@ async function openLancamentoModal(l){
       </div>
       <div id="lc-fornecedor-wrap" style="${l&&l.tipo==='saida'?'':'display:none'}">
         <label>Fornecedor</label>
-        <input id="lc-sacado" value="${l?l.sacado||'':''}" placeholder="Nome do fornecedor ou prestador..." list="fornecedores-list" autocomplete="off">
+        <input id="lc-sacado" data-upper="true" value="${l?l.sacado||'':''}" placeholder="Nome do fornecedor ou prestador..." list="fornecedores-list" autocomplete="off">
         <datalist id="fornecedores-list"></datalist>
       </div>
       <div><label>Observação</label><textarea id="lc-obs" rows="2">${l?l.observacao||'':''}</textarea></div>
@@ -2558,11 +2564,11 @@ async function saveLancamento(id){
   const base={
     tipo:document.getElementById('lc-tipo').value,
     front:document.getElementById('lc-front').value,
-    descricao:document.getElementById('lc-desc').value.trim(),
+    descricao:toUpper(document.getElementById('lc-desc').value),
     categoria_id:document.getElementById('lc-cat').value||null,
     status:document.getElementById('lc-status').value,
     forma_pagamento:forma||null,
-    sacado:document.getElementById('lc-sacado')?.value?.trim()||null,
+    sacado:toUpper(document.getElementById('lc-sacado')?.value)||null,
     data_vencimento:document.getElementById('lc-venc').value||null,
     data_pagamento:document.getElementById('lc-pgto').value||null,
     cliente_id:document.getElementById('lc-cli').value||null,
@@ -2623,7 +2629,7 @@ function openMetaModal(m){
   openModal(`<div class="modal">
     <div class="modal-header"><h3>${m?'Editar meta':'Definir meta mensal'}</h3><button class="btn-close" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
-      <div><label>Front *</label><select id="mt-front"><option value="Nacasa Comunicação" ${!m||m.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${m&&m.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
+      <div><label>Front *</label><select id="mt-front" data-upper="true"><option value="Nacasa Comunicação" ${!m||m.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option><option value="Nacasa Educação" ${m&&m.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option></select></div>
       <div><label>Mês de referência *</label><input id="mt-mes" type="month" value="${m?m.mes_referencia.slice(0,7):''}"></div>
       <div><label>Valor da meta (R$) *</label><input id="mt-val" type="number" step="0.01" value="${m?m.valor_meta:''}" placeholder="0,00"></div>
     </div></div>
@@ -3031,12 +3037,12 @@ async function openLeadModal(l){
     <div class="mb"><div class="fg">
       <div class="fs">Identificação</div>
       <div class="fr">
-        <div><label>Nome *</label><input id="ld-nome" value="${l?l.nome:''}" placeholder="Nome do lead ou empresa"></div>
+        <div><label>Nome *</label><input id="ld-nome" data-upper="true" value="${l?l.nome:''}" placeholder="Nome do lead ou empresa"></div>
         <div><label>Telefone</label><input id="ld-tel" value="${l?l.telefone||'':''}" placeholder="(84) 9 0000-0000"></div>
       </div>
       <div class="fr">
         <div><label>E-mail</label><input id="ld-email" type="email" value="${l?l.email||'':''}" placeholder="email@exemplo.com"></div>
-        <div><label>Origem</label><input id="ld-origem" value="${l?l.origem||'':''}" placeholder="Instagram, indicação, LinkedIn..."></div>
+        <div><label>Origem</label><input id="ld-origem" data-upper="true" value="${l?l.origem||'':''}" placeholder="Instagram, indicação, LinkedIn..."></div>
       </div>
       <div class="fs">Qualificação</div>
       <div class="fr">
@@ -3044,7 +3050,7 @@ async function openLeadModal(l){
           <option value="Nacasa Comunicação" ${!l||l.front==='Nacasa Comunicação'?'selected':''}>Nacasa Comunicação</option>
           <option value="Nacasa Educação" ${l&&l.front==='Nacasa Educação'?'selected':''}>Nacasa Educação</option>
         </select></div>
-        <div><label>Produto de interesse</label><input id="ld-produto" value="${l?l.produto||'':''}" placeholder="Ex: ECOAR, Gestão de conteúdo..."></div>
+        <div><label>Produto de interesse</label><input id="ld-produto" data-upper="true" value="${l?l.produto||'':''}" placeholder="Ex: ECOAR, Gestão de conteúdo..."></div>
       </div>
       <div class="fr">
         <div><label>Etapa *</label><select id="ld-etapa">
@@ -3072,12 +3078,12 @@ async function openLeadModal(l){
 
 async function saveLead(id){
   const data={
-    nome:document.getElementById('ld-nome').value.trim(),
+    nome:toUpper(document.getElementById('ld-nome').value),
     telefone:document.getElementById('ld-tel').value.trim(),
     email:document.getElementById('ld-email').value.trim(),
-    origem:document.getElementById('ld-origem').value.trim(),
+    origem:toUpper(document.getElementById('ld-origem').value),
     front:document.getElementById('ld-front').value,
-    produto:document.getElementById('ld-produto').value.trim(),
+    produto:toUpper(document.getElementById('ld-produto').value),
     etapa:document.getElementById('ld-etapa').value,
     temperatura:document.getElementById('ld-temp').value,
     valor_potencial:parseFloat(document.getElementById('ld-val').value)||null,
@@ -3178,7 +3184,7 @@ function openCategoriaModal(cat){
   openModal(`<div class="modal">
     <div class="mh"><h3>${cat?'Editar categoria':'Nova categoria'}</h3><button class="bx" onclick="closeModalForce()"><i class="ti ti-x"></i></button></div>
     <div class="mb"><div class="fg">
-      <div><label>Nome *</label><input id="cat-nome" value="${cat?cat.nome:''}" placeholder="Ex: Gestão de conteúdo, ISS, Ferramentas..."></div>
+      <div><label>Nome *</label><input id="cat-nome" data-upper="true" value="${cat?cat.nome:''}" placeholder="Ex: Gestão de conteúdo, ISS, Ferramentas..."></div>
       <div><label>Tipo *</label><select id="cat-tipo" onchange="onCatTipoChange()">
         <option value="entrada" ${!cat||cat.tipo==='entrada'?'selected':''}>Entrada</option>
         <option value="saida" ${cat&&cat.tipo==='saida'?'selected':''}>Saída</option>
@@ -3213,7 +3219,7 @@ async function saveCategoria(id){
   const tipo=document.getElementById('cat-tipo').value;
   const tipoContabil=tipo==='entrada'?'receita_operacional':(document.getElementById('cat-contabil')?.value||'despesa_operacional');
   const data={
-    nome:document.getElementById('cat-nome').value.trim(),
+    nome:toUpper(document.getElementById('cat-nome').value),
     tipo,
     tipo_contabil:tipoContabil,
     ativa:true

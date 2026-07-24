@@ -2384,13 +2384,13 @@ async function loadLancamentos(){
       <input placeholder="Buscar descrição, cliente..." id="fl-busca" oninput="applyLancFilter()" style="max-width:220px">
     </div>
     <div class="card"><div class="table-wrap"><table id="lanc-table">
-    <thead><tr><th>Tipo</th><th>Descrição</th><th>Front</th><th>Categoria</th><th>Cliente</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Forma</th><th>Status</th><th style="width:90px"></th></tr></thead>
+    <thead><tr><th>Tipo</th><th>Descrição</th><th>Front</th><th>Categoria</th><th>Cliente / Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Forma</th><th>Status</th><th style="width:90px"></th></tr></thead>
     <tbody>${rows.length?rows.map(r=>`<tr data-tipo="${r.tipo}" data-status="${r.status}" data-mes="${r.data_vencimento?r.data_vencimento.slice(0,7):''}" data-busca="${(r.descricao+(r.clientes?r.clientes.nome:'')+(r.categorias?r.categorias.nome:'')).toLowerCase()}">
       <td><span class="badge ${r.tipo==='entrada'?'badge-green':'badge-red'} badge-dot">${r.tipo}</span></td>
       <td class="td-primary">${r.descricao}</td>
       <td>${frontTag(r.front)}</td>
       <td style="color:var(--text-2)">${r.categorias?r.categorias.nome:'—'}${r.tipo==='saida'&&r.sacado?' · <em style="color:var(--text-3)">'+r.sacado+'</em>':''}</td>
-      <td style="color:var(--text-2)">${r.clientes?r.clientes.nome:'—'}</td>
+      <td style="color:var(--text-2)">${r.tipo==='entrada'?(r.clientes?r.clientes.nome:'—'):(r.sacado?'<em>'+r.sacado+'</em>':'—')}</td>
       <td class="td-mono"><strong>${fmt(r.valor)}</strong></td>
       <td style="color:var(--text-2)">${fmtDate(r.data_vencimento)}</td>
       <td style="color:var(--text-2)">${fmtDate(r.data_pagamento)}</td>
@@ -2490,7 +2490,8 @@ async function openLancamentoModal(l){
       </div>
       <div id="lc-fornecedor-wrap" style="${l&&l.tipo==='saida'?'':'display:none'}">
         <label>Fornecedor</label>
-        <input id="lc-sacado" value="${l?l.sacado||'':''}" placeholder="Nome do fornecedor ou prestador...">
+        <input id="lc-sacado" value="${l?l.sacado||'':''}" placeholder="Nome do fornecedor ou prestador..." list="fornecedores-list" autocomplete="off">
+        <datalist id="fornecedores-list"></datalist>
       </div>
       <div><label>Observação</label><textarea id="lc-obs" rows="2">${l?l.observacao||'':''}</textarea></div>
     </div></div>
@@ -2531,9 +2532,18 @@ function onFormaChange(){
 }
 
 // Chamar após modal abrir para refletir valor existente
-function initFormaModal(){
+async function initFormaModal(){
   setTimeout(onFormaChange, 50);
   setTimeout(toggleFornecedor, 50);
+  // Carregar fornecedores já cadastrados para sugestão
+  try{
+    const sacados = await dbGet('lancamentos','select=sacado&tipo=eq.saida&sacado=not.is.null&order=sacado.asc');
+    const unicos = [...new Set(sacados.map(l=>l.sacado).filter(Boolean))];
+    const dl = document.getElementById('fornecedores-list');
+    if(dl){
+      dl.innerHTML = unicos.map(s=>`<option value="${s}">`).join('');
+    }
+  }catch(e){console.warn('Fornecedores:', e.message);}
 }
 
 async function saveLancamento(id){
